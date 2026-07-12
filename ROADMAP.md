@@ -10,7 +10,7 @@
 ## Week 2 — Detection & Preprocessing
 | Issue | Task | Ownership | Status |
 |-------|------|-----------|--------|
-| [#1](https://github.com/Ali-Mezher/PhotoMatch/issues/1) | Setup: configure dev environment & install dependencies | — | ✅ Done |
+| [#1](https://github.com/Ali-Mezher/PhotoMatch/issues/1) | Setup: configure dev environment & install dependencies | Ali Mezher | ✅ Done |
 | [#2](https://github.com/Ali-Mezher/PhotoMatch/issues/2) | Preprocessing: color & geometry correction | — | ⬜ Not started |
 | [#3](https://github.com/Ali-Mezher/PhotoMatch/issues/3) | Preprocessing: intensity transformation (brightness & contrast) | — | ⬜ Not started |
 | [#4](https://github.com/Ali-Mezher/PhotoMatch/issues/4) | Preprocessing: convolution filtering (denoise & sharpen) | — | ⬜ Not started |
