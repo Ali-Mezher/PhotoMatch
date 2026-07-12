@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Event photos and biometric data (never commit real faces)
+data/events/*/
+data/events/**/*.jpg
+data/events/**/*.jpeg
+data/events/**/*.png
+data/events/**/*.JPG
+data/events/**/*.JPEG
+data/events/**/*.PNG
+
+# Embeddings and indexes
+*.index
+*.faiss
+*.npy
+*.npz
+*.pkl
+*.h5
+*.pt
+*.pth
+
+# Pretrained model weights (keep the folder, ignore the files)
+models/*
+!models/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+logs/
+
+# Env
+.env
+*.env
