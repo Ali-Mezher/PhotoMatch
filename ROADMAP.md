@@ -16,7 +16,7 @@
 | [#4](https://github.com/Ali-Mezher/PhotoMatch/issues/4) | Preprocessing: convolution filtering (denoise & sharpen) | Ali Mezher | ✅ Done | |
 | [#5](https://github.com/Ali-Mezher/PhotoMatch/issues/5) | Preprocessing: morphological operations & segmentation | Ali Mezher | ✅ Done | |
 | [#6](https://github.com/Ali-Mezher/PhotoMatch/issues/6) | Detection: implement face detector (MTCNN / RetinaFace) | Mahmood Tendail | ✅ Done | |
-| [#7](https://github.com/Ali-Mezher/PhotoMatch/issues/7) | Detection: generate face embeddings (FaceNet / ArcFace) | Mahmood Tendail | 🟨 Implemented — integration fix needed | Repair the preprocessing API imports, then verify FaceNet512 embedding generation with a real face image. |
+| [#7](https://github.com/Ali-Mezher/PhotoMatch/issues/7) | Detection: generate face embeddings (FaceNet / ArcFace) | Mahmood Tendail | ✅ Done | |
 
 ---
 
