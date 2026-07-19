@@ -31,6 +31,35 @@ class TestFaceDetector:
         assert d.bbox == (10, 10, 50, 50)
         assert 0.0 <= d.confidence <= 1.0
 
+    def test_detect_converts_to_rgb_and_filters_results(self):
+        class FakeMTCNN:
+            def __init__(self):
+                self.image = None
+
+            def detect_faces(self, image):
+                self.image = image
+                return [
+                    {
+                        "box": [-5, -3, 60, 70],
+                        "confidence": 0.96,
+                        "keypoints": {"nose": (20, 30)},
+                    },
+                    {"box": [10, 10, 60, 70], "confidence": 0.50},
+                    {"box": [10, 10, 20, 20], "confidence": 0.99},
+                ]
+
+        detector = FaceDetector(min_confidence=0.90, min_face_size=40)
+        detector._detector = FakeMTCNN()
+        bgr_image = np.zeros((100, 100, 3), dtype=np.uint8)
+        bgr_image[0, 0] = [10, 20, 30]
+
+        results = detector.detect(bgr_image)
+
+        assert detector._detector.image[0, 0].tolist() == [30, 20, 10]
+        assert len(results) == 1
+        assert results[0].bbox == (0, 0, 60, 70)
+        assert results[0].keypoints == {"nose": (20, 30)}
+
 
 class TestEmbeddingExtractor:
     def test_lazy_loading_does_not_load_model_on_init(self):
