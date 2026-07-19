@@ -7,6 +7,8 @@ the same kind of thin wrapper as face_detector.py, for the same reason:
 swapping the embedding model later should mean changing this file only.
 """
 
+import sys
+
 import numpy as np
 
 from config import EMBEDDING_MODEL, EMBEDDING_DIM
@@ -24,7 +26,22 @@ class EmbeddingExtractor:
 
     def _ensure_loaded(self):
         if self._deepface is None:
-            from deepface import DeepFace  # deferred import — heavy, TF-backed
+            # DeepFace logs emoji while downloading model weights. Windows
+            # PowerShell may expose a cp1252 stream, which otherwise raises a
+            # UnicodeEncodeError before the download even starts.
+            for stream in (sys.stdout, sys.stderr):
+                reconfigure = getattr(stream, "reconfigure", None)
+                if reconfigure is not None:
+                    reconfigure(errors="replace")
+
+            try:
+                from deepface import DeepFace  # deferred import — heavy, TF-backed
+            except (ImportError, ValueError) as exc:
+                raise RuntimeError(
+                    "DeepFace could not initialize. Install the dependencies in "
+                    "requirements.txt (including a tf-keras version compatible "
+                    "with TensorFlow)."
+                ) from exc
 
             self._deepface = DeepFace
 
@@ -61,6 +78,12 @@ class EmbeddingExtractor:
         )
 
         embedding = np.array(result[0]["embedding"], dtype=np.float32)
+
+        if embedding.shape != (EMBEDDING_DIM,):
+            raise RuntimeError(
+                f"{self.model_name} returned embedding shape {embedding.shape}; "
+                f"expected ({EMBEDDING_DIM},)"
+            )
 
         norm = np.linalg.norm(embedding)
         if norm > 0:
