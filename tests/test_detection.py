@@ -87,6 +87,32 @@ class TestEmbeddingExtractor:
         results = extractor.get_embeddings_batch([good_face, bad_face, good_face])
         assert len(results) == 2  # bad_face's ValueError should be swallowed
 
+    def test_get_embedding_normalizes_expected_vector(self):
+        class FakeDeepFace:
+            @staticmethod
+            def represent(**kwargs):
+                return [{"embedding": [2.0] * 512}]
+
+        extractor = EmbeddingExtractor()
+        extractor._deepface = FakeDeepFace
+        embedding = extractor.get_embedding(np.ones((50, 50, 3), dtype=np.uint8))
+
+        assert embedding.shape == (512,)
+        assert embedding.dtype == np.float32
+        assert np.linalg.norm(embedding) == pytest.approx(1.0)
+
+    def test_get_embedding_rejects_wrong_vector_dimension(self):
+        class FakeDeepFace:
+            @staticmethod
+            def represent(**kwargs):
+                return [{"embedding": [1.0] * 128}]
+
+        extractor = EmbeddingExtractor()
+        extractor._deepface = FakeDeepFace
+
+        with pytest.raises(RuntimeError, match=r"expected \(512,\)"):
+            extractor.get_embedding(np.ones((50, 50, 3), dtype=np.uint8))
+
 
 # --- Manual integration check (not run by pytest automatically) ---------
 #
