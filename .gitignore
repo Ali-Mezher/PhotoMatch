@@ -13,8 +13,10 @@ dist/
 build/
 .eggs/
 .venv/
+.venv,/
 venv/
 env/
+then/
 
 # Jupyter
 .ipynb_checkpoints/
