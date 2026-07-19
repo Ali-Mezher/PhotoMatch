@@ -1,92 +1,47 @@
-"""
-Issue #2 — Color & geometry correction.
-
-Normalizes color balance and corrects orientation/geometric distortion
-across event photos shot in mixed lighting (indoor venue lighting,
-outdoor daylight, flash) and at inconsistent angles.
-"""
-
 import cv2
 import numpy as np
 
 
-def correct_white_balance(image: np.ndarray) -> np.ndarray:
-    """
-    Normalize color balance using the Gray World assumption: scale each
-    color channel so the average pixel value is neutral gray. Cheap and
-    effective for mixed-lighting event photos without needing a reference
-    card.
-
-    Args:
-        image: BGR image (as loaded by cv2.imread), dtype uint8.
-
-    Returns:
-        BGR image with white balance corrected, same shape/dtype.
-    """
-    if image is None or image.size == 0:
-        raise ValueError("correct_white_balance: received an empty image")
-
+def normalize_white_balance(image: np.ndarray) -> np.ndarray:
+    """Gray world white balance: scales each channel so its mean equals the
+    overall gray mean. Corrects color casts from mixed indoor/outdoor lighting."""
     result = image.astype(np.float32)
-    b, g, r = cv2.split(result)
+    avg_b = np.mean(result[:, :, 0])
+    avg_g = np.mean(result[:, :, 1])
+    avg_r = np.mean(result[:, :, 2])
+    avg_gray = (avg_b + avg_g + avg_r) / 3
 
-    b_mean, g_mean, r_mean = b.mean(), g.mean(), r.mean()
-    gray_mean = (b_mean + g_mean + r_mean) / 3.0
-
-    # Avoid divide-by-zero on pathological (near-black) images.
-    b = b * (gray_mean / max(b_mean, 1e-6))
-    g = g * (gray_mean / max(g_mean, 1e-6))
-    r = r * (gray_mean / max(r_mean, 1e-6))
-
-    balanced = cv2.merge([b, g, r])
-    return np.clip(balanced, 0, 255).astype(np.uint8)
+    result[:, :, 0] = np.clip(result[:, :, 0] * (avg_gray / avg_b), 0, 255)
+    result[:, :, 1] = np.clip(result[:, :, 1] * (avg_gray / avg_g), 0, 255)
+    result[:, :, 2] = np.clip(result[:, :, 2] * (avg_gray / avg_r), 0, 255)
+    return result.astype(np.uint8)
 
 
-def correct_orientation(image: np.ndarray) -> np.ndarray:
-    """
-    Auto-rotate an image to right-side-up based on EXIF-independent content
-    analysis is out of scope for v1 — most event photos already carry
-    correct EXIF orientation that cv2.imread/PIL handle on load. This is a
-    placeholder for manual rotation correction if a batch of photos comes
-    in sideways.
+def correct_geometry(image: np.ndarray, k1: float = -0.1, k2: float = 0.0) -> np.ndarray:
+    """Correct radial lens distortion (barrel/pincushion).
 
-    Args:
-        image: BGR image.
-
-    Returns:
-        The image, rotated 0 degrees (no-op) for now.
-
-    Note:
-        If a future event's photos consistently need rotation, call
-        rotate_image(image, angle) below instead of extending this
-        function — keep detection heuristics and manual fixes separate.
-    """
-    return image
-
-
-def rotate_image(image: np.ndarray, angle_degrees: float) -> np.ndarray:
-    """
-    Rotate an image by a fixed angle around its center, expanding the
-    canvas so no content is cropped.
-
-    Args:
-        image: BGR image.
-        angle_degrees: positive = counter-clockwise.
-
-    Returns:
-        Rotated BGR image.
+    k1 < 0 corrects barrel distortion (common in wide-angle event lenses).
+    k1 > 0 corrects pincushion distortion.
+    Uses an estimated camera matrix when calibration data is unavailable.
     """
     h, w = image.shape[:2]
-    center = (w / 2, h / 2)
+    f = max(w, h)
+    cx, cy = w / 2.0, h / 2.0
+    camera_matrix = np.array(
+        [[f, 0, cx],
+         [0, f, cy],
+         [0, 0,  1]], dtype=np.float32
+    )
+    dist_coeffs = np.array([k1, k2, 0.0, 0.0], dtype=np.float32)
+    return cv2.undistort(image, camera_matrix, dist_coeffs)
 
-    rotation_matrix = cv2.getRotationMatrix2D(center, angle_degrees, 1.0)
 
-    # Compute the new bounding box so rotated corners aren't clipped.
-    cos = abs(rotation_matrix[0, 0])
-    sin = abs(rotation_matrix[0, 1])
-    new_w = int((h * sin) + (w * cos))
-    new_h = int((h * cos) + (w * sin))
+def preprocess(image: np.ndarray, k1: float = -0.1, k2: float = 0.0) -> np.ndarray:
+    """Full color & geometry correction pipeline.
 
-    rotation_matrix[0, 2] += (new_w / 2) - center[0]
-    rotation_matrix[1, 2] += (new_h / 2) - center[1]
-
-    return cv2.warpAffine(image, rotation_matrix, (new_w, new_h))
+    Applies white balance normalization followed by radial distortion correction.
+    Input and output are BGR uint8 numpy arrays (OpenCV format).
+    """
+    image = normalize_white_balance(image)
+    image = correct_geometry(image, k1=k1, k2=k2)
+    return image

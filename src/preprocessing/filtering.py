@@ -1,64 +1,38 @@
-"""
-Issue #4 — Convolution filtering (denoise & sharpen).
-
-Cleans up motion blur and sensor noise from event photos (low light,
-fast-moving subjects at weddings/graduations) before face detection runs.
-"""
-
 import cv2
 import numpy as np
 
 
-def denoise(image: np.ndarray, strength: int = 10) -> np.ndarray:
+def denoise(image: np.ndarray, method: str = "bilateral") -> np.ndarray:
+    """Remove noise from the image before face detection.
+
+    'bilateral' — blurs noise while keeping edges sharp (best for faces).
+    'gaussian'  — simpler, faster, but slightly softens edges too.
     """
-    Remove sensor noise using Non-Local Means denoising, which preserves
-    edges (like facial features) better than a simple Gaussian blur.
+    if method == "bilateral":
+        return cv2.bilateralFilter(image, d=9, sigmaColor=75, sigmaSpace=75)
+    elif method == "gaussian":
+        return cv2.GaussianBlur(image, (5, 5), 0)
+    else:
+        raise ValueError(f"Unknown method '{method}'. Use 'bilateral' or 'gaussian'.")
 
-    Args:
-        image: BGR image, uint8.
-        strength: filter strength — higher removes more noise but can
-            also soften fine detail. 10 is a reasonable default for
-            typical event-photo ISO noise.
 
-    Returns:
-        Denoised BGR image.
+def sharpen(image: np.ndarray) -> np.ndarray:
+    """Sharpen edges using a convolution kernel.
+
+    The kernel boosts the center pixel and subtracts its neighbors,
+    making edges more defined. Helps detection on slightly soft photos.
     """
-    return cv2.fastNlMeansDenoisingColored(
-        image, None, h=strength, hColor=strength, templateWindowSize=7, searchWindowSize=21
-    )
+    kernel = np.array([[ 0, -1,  0],
+                       [-1,  5, -1],
+                       [ 0, -1,  0]], dtype=np.float32)
+    return cv2.filter2D(image, -1, kernel)
 
 
-def sharpen(image: np.ndarray, amount: float = 1.0) -> np.ndarray:
+def preprocess(image: np.ndarray, denoise_method: str = "bilateral") -> np.ndarray:
+    """Full filtering pipeline: denoise first, then sharpen.
+
+    Order matters — sharpening after denoising avoids amplifying grain.
     """
-    Sharpen an image via unsharp masking: blur the image, then push the
-    original away from the blurred version to boost edge contrast. Helps
-    recover detail lost to slight motion blur or lens softness.
-
-    Args:
-        image: BGR image, uint8.
-        amount: sharpening strength. 0 = no-op, ~1.0 = moderate, >2.0 = aggressive.
-
-    Returns:
-        Sharpened BGR image.
-    """
-    blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=3)
-    sharpened = cv2.addWeighted(image, 1 + amount, blurred, -amount, 0)
-    return sharpened
-
-
-def gaussian_blur(image: np.ndarray, kernel_size: int = 5) -> np.ndarray:
-    """
-    Simple Gaussian smoothing — mostly useful as a preprocessing step
-    before edge detection / segmentation, not for the main photo cleanup
-    path (use denoise() for that).
-
-    Args:
-        image: BGR or grayscale image.
-        kernel_size: must be odd; larger = more blur.
-
-    Returns:
-        Blurred image.
-    """
-    if kernel_size % 2 == 0:
-        kernel_size += 1
-    return cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
+    image = denoise(image, method=denoise_method)
+    image = sharpen(image)
+    return image
