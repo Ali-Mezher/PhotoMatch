@@ -21,8 +21,8 @@ from tkinter import filedialog, messagebox, ttk
 import cv2
 from PIL import Image, ImageOps, ImageTk
 
-from config import EVENTS_DIR
-from src.matching import match_selfie, NoFaceDetectedError, EventNotIndexedError
+from src.matching import EventNotIndexedError, NoFaceDetectedError
+from src.services import PhotoMatchService
 
 THUMBNAIL_SIZE = (160, 160)
 SELFIE_PREVIEW_SIZE = (96, 96)
@@ -39,8 +39,9 @@ class PhotoMatchApp:
     the rest are event handlers.
     """
 
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, service: PhotoMatchService | None = None):
         self.root = root
+        self.service = service or PhotoMatchService()
         self.root.title("PhotoMatch — Find Your Photos")
         self.root.geometry("900x650")
 
@@ -49,7 +50,9 @@ class PhotoMatchApp:
         self._thumbnail_refs = []  # keep PhotoImage references alive
 
         self._build_widgets()
+        self.service.start()
         self._refresh_event_list()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # -- widget construction -------------------------------------------------
 
@@ -103,10 +106,7 @@ class PhotoMatchApp:
 
     def _refresh_event_list(self):
         """List event_ids by scanning data/events/ for subfolders."""
-        if not EVENTS_DIR.exists():
-            events = []
-        else:
-            events = sorted(p.name for p in EVENTS_DIR.iterdir() if p.is_dir())
+        events = [event.event_id for event in self.service.list_events()]
 
         self.event_dropdown["values"] = events
         if events:
@@ -157,8 +157,12 @@ class PhotoMatchApp:
             if selfie_image is None:
                 raise ValueError(f"Could not read image: {selfie_path}")
 
-            results = match_selfie(selfie_image, event_id)
-            self.root.after(0, self._show_results, results)
+            results = self.service.search_selfie(selfie_image, event_id)
+            self.root.after(
+                0,
+                self._show_results,
+                {"confident": results.confident, "possible": results.possible},
+            )
 
         except NoFaceDetectedError:
             self.root.after(
@@ -236,6 +240,10 @@ class PhotoMatchApp:
 
     def _load_thumbnail(self, photo_path: str):
         return self._load_photo_image(photo_path, THUMBNAIL_SIZE)
+
+    def _on_close(self):
+        self.service.shutdown()
+        self.root.destroy()
 
     @staticmethod
     def _load_photo_image(photo_path: str | Path, size: tuple[int, int]):

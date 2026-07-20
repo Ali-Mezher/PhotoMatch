@@ -38,6 +38,18 @@ Shared constants (image size, thresholds, paths) live in [`config.py`](config.py
 at the repo root — import from there rather than hardcoding values, so
 everyone's modules stay compatible.
 
+## Application services
+
+[`src/services/`](src/services/) is the framework-independent application
+boundary for interfaces. The current Tkinter app uses `PhotoMatchService` for
+selfie search and automatic event-index scheduling; a future Flask app should
+use the same service instead of importing Tkinter or pipeline internals.
+
+On startup, the service scans event folders and queues only missing, changed,
+or failed indexes. It persists local operational status in a gitignored SQLite
+file and defaults to one indexing worker. `config.py` permits a tested maximum
+of three workers for stronger local hardware.
+
 ## Evaluation (Week 4)
 
 `src/evaluation/` measures the system against real data: precision/recall@k,

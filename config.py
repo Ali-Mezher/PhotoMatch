@@ -55,6 +55,12 @@ POSSIBLE_MATCH_THRESHOLD = 0.50
 EVENT_RAW_SUBDIR = "raw"
 EVENT_INDEXED_SUBDIR = "indexed"
 
+# Background indexing is resource-heavy because it loads face-detection and
+# embedding models. Keep the safe default at one worker; service callers may
+# raise it to a tested maximum of three for capable local hardware.
+DEFAULT_INDEX_WORKERS = 1
+MAX_INDEX_WORKERS = 3
+
 
 def event_dir(event_id: str) -> Path:
     """Return the data directory for a given event_id, creating it if needed."""
