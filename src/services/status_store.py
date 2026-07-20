@@ -161,6 +161,32 @@ class StatusStore:
                 (event_id, photo_path, fingerprint, IndexStatus.PENDING.value),
             )
 
+    def upsert_completed_image(
+        self,
+        event_id: str,
+        photo_path: str,
+        fingerprint: str,
+        status: IndexStatus,
+        face_count: int,
+    ) -> None:
+        if status not in {IndexStatus.INDEXED, IndexStatus.NO_FACE}:
+            raise ValueError("adopted image status must be indexed or no_face")
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO images(
+                    event_id, photo_path, fingerprint, status, face_count
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(event_id, photo_path) DO UPDATE SET
+                    fingerprint = excluded.fingerprint,
+                    status = excluded.status,
+                    face_count = excluded.face_count,
+                    error = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (event_id, photo_path, fingerprint, status.value, face_count),
+            )
+
     def remove_images(self, event_id: str, photo_paths: Iterable[str]) -> int:
         paths = tuple(photo_paths)
         if not paths:

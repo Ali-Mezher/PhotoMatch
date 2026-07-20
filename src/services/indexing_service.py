@@ -12,7 +12,7 @@ from config import (
     INDEX_STATUS_DB,
     validate_event_id,
 )
-from src.indexing import event_index_exists, update_event_index
+from src.indexing import event_index_exists, load_event_index, update_event_index
 
 from .indexing_manager import IndexingManager
 from .models import EventSummary, ImageIndexOutcome, ImageIndexStatus, IndexStatus
@@ -30,12 +30,14 @@ class IndexingService:
         database_path: Path = INDEX_STATUS_DB,
         index_updater=update_event_index,
         index_exists=event_index_exists,
+        index_loader=load_event_index,
     ):
         self.events_dir = Path(events_dir).resolve()
         self.store = StatusStore(database_path)
         self._index_updater = index_updater
         self._index_exists = index_exists
-        self._manager = IndexingManager(self._drain_queue)
+        self._index_loader = index_loader
+        self._manager = IndexingManager(lambda: self._drain_queue(False))
 
     def start(self) -> None:
         """Start the worker and resume jobs interrupted by a prior shutdown."""
@@ -96,6 +98,11 @@ class IndexingService:
         current_files = self._event_images(event_id)
         stored = self.store.get_image_map(event_id)
         adopting_existing_index = not stored and self._event_index_exists(event_id)
+        if adopting_existing_index and self._adopt_existing_index(
+            event_id, current_files
+        ):
+            stored = self.store.get_image_map(event_id)
+            adopting_existing_index = False
         current_paths = {str(path): path for path in current_files}
         changed_or_removed = False
 
@@ -145,15 +152,21 @@ class IndexingService:
         event_id = self._require_registered_event(event_id)
         return self.store.list_images(event_id)
 
-    def _drain_queue(self) -> None:
+    def run_pending(self, show_progress: bool = False) -> None:
+        """Synchronously drain queued jobs, primarily for CLI operation."""
+        self._drain_queue(show_progress)
+
+    def _drain_queue(self, show_progress: bool = False) -> None:
         while True:
             job = self.store.claim_next_event()
             if job is None:
                 return
             event_id, rebuild_requested = job
-            self._run_index_job(event_id, rebuild_requested)
+            self._run_index_job(event_id, rebuild_requested, show_progress)
 
-    def _run_index_job(self, event_id: str, rebuild_requested: bool) -> None:
+    def _run_index_job(
+        self, event_id: str, rebuild_requested: bool, show_progress: bool = False
+    ) -> None:
         rebuild = rebuild_requested or not self._event_index_exists(event_id)
         paths = [
             Path(path) for path in self.store.paths_for_processing(event_id, rebuild)
@@ -164,7 +177,7 @@ class IndexingService:
                 event_id,
                 paths,
                 rebuild=rebuild,
-                show_progress=False,
+                show_progress=show_progress,
             )
             self.store.record_outcomes(
                 event_id,
@@ -199,6 +212,34 @@ class IndexingService:
             for path in raw_dir.iterdir()
             if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
         )
+
+    def _adopt_existing_index(
+        self, event_id: str, current_files: list[Path]
+    ) -> bool:
+        """Seed SQL state from a legacy full index without reprocessing photos."""
+        try:
+            index = self._index_loader(event_id)
+        except Exception:  # noqa: BLE001 - an unreadable legacy index is rebuilt
+            return False
+
+        faces_per_photo: dict[str, int] = {}
+        for metadata in index.metadata:
+            resolved_path = str(Path(metadata.photo_path).resolve())
+            faces_per_photo[resolved_path] = faces_per_photo.get(resolved_path, 0) + 1
+
+        for photo_path in current_files:
+            photo_path_string = str(photo_path)
+            face_count = faces_per_photo.get(photo_path_string, 0)
+            status = IndexStatus.INDEXED if face_count else IndexStatus.NO_FACE
+            self.store.upsert_completed_image(
+                event_id,
+                photo_path_string,
+                self._file_fingerprint(photo_path),
+                status,
+                face_count,
+            )
+        self.store.complete_event(event_id, INDEX_PIPELINE_VERSION)
+        return True
 
     def _raw_dir(self, event_id: str) -> Path:
         event_root = (self.events_dir / validate_event_id(event_id)).resolve()
