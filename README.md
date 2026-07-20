@@ -111,6 +111,34 @@ python scripts/tune_thresholds.py path/to/scores.csv
 python -m src.interface.app
 ```
 
+## Incremental indexing service
+
+`src.services.IndexingService` keeps event and per-image indexing state in a
+local SQLite database. Once an event has been indexed, adding a photo processes
+only that photo. Changing or removing an existing photo safely rebuilds that
+event so stale faces cannot remain searchable.
+
+The worker is interrupt-driven: it sleeps until `request_index()` is called and
+does not scan on a timer. Application layers should register/import an image,
+then signal its event:
+
+```python
+from src.services import IndexingService
+
+indexing = IndexingService()
+indexing.register_event("graduation_2026", "2026-07-01")
+indexing.start()
+indexing.request_index("graduation_2026")
+
+# During application shutdown:
+indexing.shutdown()
+```
+
+Queued events run one at a time, ordered by their explicit event date (oldest
+first). The existing `demo_index_and_search.py index` command remains a forced
+full rebuild for manual operation and recovery. Flask integration is
+intentionally left to the web-interface branch.
+
 The threshold-tuning CSV needs `score` and `label` columns. Use
 `genuine` when both faces belong to the same person and `impostor` when
 they belong to different people:
