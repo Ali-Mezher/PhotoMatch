@@ -65,6 +65,10 @@ desktop.ini
 *.log
 logs/
 
+# Local indexing scheduler state
+data/indexing_status.sqlite3
+data/indexing_status.sqlite3-*
+
 # Env
 .env
 *.env

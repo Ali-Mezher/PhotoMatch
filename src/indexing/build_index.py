@@ -8,6 +8,7 @@ called for an event, so unfinished/soon-to-be-replaced photos never end
 up searchable by accident.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 
 import cv2
@@ -20,9 +21,14 @@ from src.detection import detect_and_embed
 from .faiss_index import EventIndex, IndexedFace
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+ProgressCallback = Callable[[Path, str, int, str | None], None]
 
 
-def build_event_index(event_id: str, show_progress: bool = True) -> EventIndex:
+def build_event_index(
+    event_id: str,
+    show_progress: bool = True,
+    progress_callback: ProgressCallback | None = None,
+) -> EventIndex:
     """
     Index every photo in data/events/<event_id>/raw/ and save the result
     to data/events/<event_id>/indexed/.
@@ -69,6 +75,8 @@ def build_event_index(event_id: str, show_progress: bool = True) -> EventIndex:
         image = cv2.imread(str(photo_path))
         if image is None:
             skipped.append((photo_path, "could not read image"))
+            if progress_callback:
+                progress_callback(photo_path, "failed", 0, "could not read image")
             continue
 
         try:
@@ -76,9 +84,13 @@ def build_event_index(event_id: str, show_progress: bool = True) -> EventIndex:
             faces = detect_and_embed(cleaned)
         except Exception as exc:  # noqa: BLE001 — one bad photo shouldn't kill the run
             skipped.append((photo_path, str(exc)))
+            if progress_callback:
+                progress_callback(photo_path, "failed", 0, str(exc))
             continue
 
         if not faces:
+            if progress_callback:
+                progress_callback(photo_path, "no_face", 0, None)
             continue  # no faces in this photo (e.g. decor/venue shot) — not an error
 
         embeddings = [face.embedding for face in faces]
@@ -91,6 +103,8 @@ def build_event_index(event_id: str, show_progress: bool = True) -> EventIndex:
             for face in faces
         ]
         index.add(embeddings, metadata)
+        if progress_callback:
+            progress_callback(photo_path, "indexed", len(faces), None)
 
     output_dir = event_dir(event_id) / EVENT_INDEXED_SUBDIR
     index.save(output_dir)

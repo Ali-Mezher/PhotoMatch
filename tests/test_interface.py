@@ -13,6 +13,7 @@ from src.matching import EventNotIndexedError, NoFaceDetectedError
 def _worker_app():
     app = PhotoMatchApp.__new__(PhotoMatchApp)
     app.root = Mock()
+    app.service = Mock()
     app._show_results = Mock()
     app._show_error = Mock()
     return app
@@ -23,12 +24,11 @@ def test_search_worker_sends_matches_back_to_ui_thread():
     image = np.zeros((8, 8, 3), dtype=np.uint8)
     results = {"confident": [], "possible": []}
 
-    with patch("src.interface.app.cv2.imread", return_value=image), patch(
-        "src.interface.app.match_selfie", return_value=results
-    ) as match:
+    app.service.search_selfie.return_value = SimpleNamespace(confident=[], possible=[])
+    with patch("src.interface.app.cv2.imread", return_value=image):
         app._search_worker("graduation", Path("selfie.jpg"))
 
-    match.assert_called_once_with(image, "graduation")
+    app.service.search_selfie.assert_called_once_with(image, "graduation")
     app.root.after.assert_called_once_with(0, app._show_results, results)
 
 
@@ -37,7 +37,8 @@ def test_search_worker_explains_missing_face():
 
     with patch(
         "src.interface.app.cv2.imread", return_value=np.zeros((8, 8, 3))
-    ), patch("src.interface.app.match_selfie", side_effect=NoFaceDetectedError):
+    ):
+        app.service.search_selfie.side_effect = NoFaceDetectedError
         app._search_worker("graduation", Path("selfie.jpg"))
 
     callback = app.root.after.call_args.args
@@ -50,7 +51,8 @@ def test_search_worker_explains_unindexed_event():
 
     with patch(
         "src.interface.app.cv2.imread", return_value=np.zeros((8, 8, 3))
-    ), patch("src.interface.app.match_selfie", side_effect=EventNotIndexedError):
+    ):
+        app.service.search_selfie.side_effect = EventNotIndexedError
         app._search_worker("graduation", Path("selfie.jpg"))
 
     callback = app.root.after.call_args.args
