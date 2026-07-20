@@ -19,13 +19,17 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import cv2
-from PIL import Image, ImageTk
+from PIL import Image, ImageOps, ImageTk
 
 from config import EVENTS_DIR
 from src.matching import match_selfie, NoFaceDetectedError, EventNotIndexedError
 
 THUMBNAIL_SIZE = (160, 160)
+SELFIE_PREVIEW_SIZE = (96, 96)
 RESULTS_PER_ROW = 4
+SUPPORTED_IMAGE_TYPES = (
+    ("Image files", "*.jpg *.jpeg *.png *.bmp *.webp *.JPG *.JPEG *.PNG *.BMP *.WEBP"),
+)
 
 
 class PhotoMatchApp:
@@ -41,6 +45,7 @@ class PhotoMatchApp:
         self.root.geometry("900x650")
 
         self.selfie_path: Path | None = None
+        self._selfie_preview_ref = None
         self._thumbnail_refs = []  # keep PhotoImage references alive
 
         self._build_widgets()
@@ -59,8 +64,8 @@ class PhotoMatchApp:
         )
         self.event_dropdown.pack(side="left", padx=(6, 20))
 
-        self.selfie_label = ttk.Label(top_frame, text="No selfie selected")
-        self.selfie_label.pack(side="left", padx=(0, 10))
+        self.selfie_preview = ttk.Label(top_frame, text="No selfie\nselected", anchor="center")
+        self.selfie_preview.pack(side="left", padx=(0, 10))
 
         ttk.Button(top_frame, text="Choose Selfie...", command=self._choose_selfie).pack(
             side="left", padx=(0, 10)
@@ -82,7 +87,13 @@ class PhotoMatchApp:
         self.results_frame.bind(
             "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        canvas.create_window((0, 0), window=self.results_frame, anchor="nw")
+        results_window = canvas.create_window(
+            (0, 0), window=self.results_frame, anchor="nw"
+        )
+        canvas.bind(
+            "<Configure>",
+            lambda event: canvas.itemconfigure(results_window, width=event.width),
+        )
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side="left", fill="both", expand=True)
@@ -104,11 +115,21 @@ class PhotoMatchApp:
     def _choose_selfie(self):
         path = filedialog.askopenfilename(
             title="Choose a selfie",
-            filetypes=[("Images", "*.jpg *.jpeg *.png *.JPG *.JPEG *.PNG")],
+            filetypes=SUPPORTED_IMAGE_TYPES,
         )
         if path:
-            self.selfie_path = Path(path)
-            self.selfie_label.config(text=self.selfie_path.name)
+            selfie_path = Path(path)
+            preview = self._load_photo_image(selfie_path, SELFIE_PREVIEW_SIZE)
+            if preview is None:
+                messagebox.showerror(
+                    "Invalid selfie", "That file could not be opened as an image."
+                )
+                return
+
+            self.selfie_path = selfie_path
+            self._selfie_preview_ref = preview
+            self.selfie_preview.config(image=preview, text=self.selfie_path.name, compound="top")
+            self.status_var.set("Selfie selected. Choose an event, then press Search.")
 
     def _run_search(self):
         event_id = self.event_var.get()
@@ -208,15 +229,23 @@ class PhotoMatchApp:
                 label = ttk.Label(cell, image=thumb)
                 label.pack()
                 self._thumbnail_refs.append(thumb)  # prevent garbage collection
+            else:
+                ttk.Label(cell, text="Preview unavailable", width=20, anchor="center").pack()
 
             ttk.Label(cell, text=f"{match.score:.2f}").pack()
 
     def _load_thumbnail(self, photo_path: str):
+        return self._load_photo_image(photo_path, THUMBNAIL_SIZE)
+
+    @staticmethod
+    def _load_photo_image(photo_path: str | Path, size: tuple[int, int]):
+        """Load an EXIF-corrected Tk image without keeping the file handle open."""
         try:
-            image = Image.open(photo_path)
-            image.thumbnail(THUMBNAIL_SIZE)
-            return ImageTk.PhotoImage(image)
-        except Exception:
+            with Image.open(photo_path) as opened:
+                image = ImageOps.exif_transpose(opened).convert("RGB")
+                image.thumbnail(size)
+                return ImageTk.PhotoImage(image.copy())
+        except (OSError, ValueError):
             return None  # broken/missing file — skip the thumbnail, not the whole result
 
 
