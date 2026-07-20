@@ -61,3 +61,33 @@ def event_dir(event_id: str) -> Path:
     d = EVENTS_DIR / event_id
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+# ---------------------------------------------------------------------------
+# Evaluation (Week 4)
+# ---------------------------------------------------------------------------
+# data/evaluation/<event_id>/identities/<person_name>/selfie/    one selfie
+# data/evaluation/<event_id>/identities/<person_name>/matches/   copies of
+#     that person's photos from data/events/<event_id>/raw/ — filenames
+#     MUST match exactly, that's how ground truth links back to the index.
+#
+# The raw event photos themselves are NOT duplicated here — evaluation
+# reuses data/events/<event_id>/raw/ directly (see EVENT_RAW_SUBDIR above),
+# so an event only ever needs to be indexed once.
+EVALUATION_DIR = DATA_DIR / "evaluation"
+EVAL_IDENTITIES_SUBDIR = "identities"
+EVAL_SELFIE_SUBDIR = "selfie"
+EVAL_MATCHES_SUBDIR = "matches"
+
+DEFAULT_EVAL_TOP_K = 10  # default k for precision/recall@k
+
+# Manual search baseline from the proposal (5-6 hours per student) —
+# used as the comparison point for the time-savings evaluation.
+MANUAL_SEARCH_BASELINE_SECONDS = 5.5 * 3600
+
+
+def evaluation_dir(event_id: str) -> Path:
+    """Return the evaluation data directory for a given event_id."""
+    d = EVALUATION_DIR / event_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
