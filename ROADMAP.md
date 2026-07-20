@@ -54,6 +54,7 @@
 | #20 | Interface: auto-clustering of similar faces *(stretch goal)* | — | ⬜ Not started | Cluster detected faces into candidate identities for staff review. |
 | #21 | Security: liveness / anti-spoofing *(stretch goal)* | — | ⬜ Not started | Add and evaluate a basic blink, motion, or texture-based check to reduce searches using another person's photograph. |
 | #22 | Interface: watermarked previews & admin dashboard *(stretch goal)* | — | ⬜ Not started | Show protected previews and give staff indexing status, failed-job retry, and manual review controls. |
+| #23 | Indexing: automatic event queue & service foundation | Malek AlKashat | 🟨 Implemented — pending review/merge | Adds a framework-independent `PhotoMatchService`, local per-event/per-image SQLite status tracking, stale-event auto-queueing, and a bounded indexing scheduler (default 1, tunable up to 3 workers). Tkinter now uses the service layer; the future Flask interface will reuse it. 133 tests pass. |
 
 ---
 
