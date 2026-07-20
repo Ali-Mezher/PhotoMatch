@@ -43,7 +43,7 @@
 ## Week 5 — Deployment Readiness & Final Report
 | Issue | Task | Ownership | Status | Notes |
 |-------|------|-----------|--------|-------|
-| #18 | Privacy: consent, secure biometric storage & retention/deletion policy | — | ⬜ Not started | Document consent procedures, local storage protections, access controls, and when selfies, embeddings, and event data must be deleted. |
+| #18 | Privacy: consent, secure biometric storage & retention/deletion policy | Nourallah Mourad | ✅ Done | `docs/PRIVACY_AND_RETENTION.md` defines affirmative and guardian consent, separate evaluation consent, local encrypted storage and least-privilege access, exact retention limits, verified deletion, and incident response. |
 | #19 | Report & presentation: final write-up | — | ⬜ Not started | Incorporate the completed evaluation, validation, privacy, and deployment-readiness results. |
 
 ---
