@@ -88,6 +88,15 @@ class TestEventIndex:
         scores, metadata = index.search(np.zeros(8, dtype=np.float32), k=5)
         assert scores == []
         assert metadata == []
+        assert index.embeddings().shape == (0, 8)
+
+    def test_embeddings_reconstruct_in_metadata_order(self, populated_index):
+        index, target = populated_index
+
+        reconstructed = index.embeddings()
+
+        assert reconstructed.shape == (3, 8)
+        assert np.dot(reconstructed[0], target) == pytest.approx(1.0)
 
     def test_search_k_larger_than_index_size(self, populated_index):
         index, target = populated_index
