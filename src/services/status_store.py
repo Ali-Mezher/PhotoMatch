@@ -42,6 +42,7 @@ class StatusStore:
                 CREATE TABLE IF NOT EXISTS events (
                     event_id TEXT PRIMARY KEY,
                     event_date TEXT NOT NULL,
+                    display_name TEXT,
                     status TEXT NOT NULL,
                     rebuild_required INTEGER NOT NULL DEFAULT 0,
                     pipeline_version TEXT NOT NULL DEFAULT '',
@@ -79,21 +80,48 @@ class StatusStore:
                 );
                 """
             )
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(events)").fetchall()
+            }
+            if "display_name" not in columns:
+                connection.execute("ALTER TABLE events ADD COLUMN display_name TEXT")
+            connection.execute(
+                """
+                UPDATE events SET display_name = event_id
+                WHERE display_name IS NULL OR TRIM(display_name) = ''
+                """
+            )
             event_ids = connection.execute("SELECT event_id FROM events").fetchall()
             for row in event_ids:
                 self._ensure_event_access_code(connection, row["event_id"])
 
-    def register_event(self, event_id: str, event_date: str) -> None:
+    def register_event(
+        self, event_id: str, event_date: str, display_name: str | None = None
+    ) -> None:
+        normalized_name = (display_name or event_id).strip()
+        if not normalized_name:
+            raise ValueError("display_name must not be empty")
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO events(event_id, event_date, status)
-                VALUES (?, ?, ?)
+                INSERT INTO events(event_id, event_date, display_name, status)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(event_id) DO UPDATE SET
                     event_date = excluded.event_date,
+                    display_name = CASE
+                        WHEN ? IS NULL THEN events.display_name
+                        ELSE excluded.display_name
+                    END,
                     updated_at = CURRENT_TIMESTAMP
                 """,
-                (event_id, event_date, IndexStatus.PENDING.value),
+                (
+                    event_id,
+                    event_date,
+                    normalized_name,
+                    IndexStatus.PENDING.value,
+                    display_name,
+                ),
             )
             self._ensure_event_access_code(connection, event_id)
 
@@ -175,7 +203,7 @@ class StatusStore:
     @staticmethod
     def _event_summary_query(suffix: str) -> str:
         return f"""
-            SELECT e.event_id, e.event_date, e.status, e.rebuild_required,
+            SELECT e.event_id, e.event_date, e.display_name, e.status, e.rebuild_required,
                    e.error, e.updated_at,
                    COUNT(i.photo_path) AS total_images,
                    SUM(CASE WHEN i.status = 'indexed' THEN 1 ELSE 0 END) AS indexed_images,
@@ -203,6 +231,7 @@ class StatusStore:
             pending_images=row["pending_images"] or 0,
             error=row["error"],
             updated_at=row["updated_at"],
+            display_name=row["display_name"],
         )
 
     def list_images(self, event_id: str) -> list[ImageIndexStatus]:

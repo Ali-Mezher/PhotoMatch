@@ -19,7 +19,13 @@ from uuid import uuid4
 import cv2
 from tqdm import tqdm
 
-from config import EVENT_RAW_SUBDIR, EVENT_INDEXED_SUBDIR, event_dir
+from config import (
+    EVENTS_DIR,
+    EVENT_RAW_SUBDIR,
+    EVENT_INDEXED_SUBDIR,
+    event_dir,
+    validate_event_id,
+)
 from src.preprocessing import preprocess_image
 from src.detection import detect_and_embed
 
@@ -104,6 +110,22 @@ def event_index_exists(event_id: str) -> bool:
     return (active_dir / "faces.faiss").exists() and (
         active_dir / "metadata.json"
     ).exists()
+
+
+def active_index_generation(
+    event_id: str, events_dir: Path = EVENTS_DIR
+) -> str | None:
+    """Return the published generation ID, or ``legacy`` for the v1 layout."""
+    output_dir = Path(events_dir).resolve() / validate_event_id(event_id) / EVENT_INDEXED_SUBDIR
+    try:
+        active_dir = _active_index_dir(output_dir)
+    except ValueError:
+        return None
+    if not (active_dir / "faces.faiss").is_file() or not (
+        active_dir / "metadata.json"
+    ).is_file():
+        return None
+    return active_dir.name if active_dir != output_dir else "legacy"
 
 
 def _process_photos(
@@ -240,3 +262,13 @@ def load_event_index(event_id: str) -> EventIndex:
     """
     index_dir = event_dir(event_id) / EVENT_INDEXED_SUBDIR
     return EventIndex.load(_active_index_dir(index_dir))
+
+
+def load_event_index_snapshot(
+    event_id: str, events_dir: Path = EVENTS_DIR
+) -> tuple[str, EventIndex]:
+    """Load an index together with the immutable generation it represents."""
+    index_dir = Path(events_dir).resolve() / validate_event_id(event_id) / EVENT_INDEXED_SUBDIR
+    active_dir = _active_index_dir(index_dir)
+    generation = active_dir.name if active_dir != index_dir else "legacy"
+    return generation, EventIndex.load(active_dir)

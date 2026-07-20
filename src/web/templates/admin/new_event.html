@@ -1,0 +1,13 @@
+{% extends "admin/base.html" %}
+{% block title %}New event{% endblock %}
+{% block content %}
+<header class="page-header"><p class="eyebrow">Event setup</p><h1>Create an event</h1><p>Only the title and event date are required. A safe folder ID and attendee code are generated automatically.</p></header>
+<section class="form-panel narrow-panel">
+  <form action="{{ url_for('admin.create_event_route') }}" method="post" class="stack-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <label>Event title<input name="title" value="{{ title or '' }}" maxlength="160" placeholder="Spring graduation" required><small>Shown to operators and attendees after code entry.</small></label>
+    <label>Event date<input type="date" name="event_date" value="{{ event_date or '' }}" required><small>Used to order indexing work, oldest first.</small></label>
+    <div class="form-actions"><button class="button button-primary" type="submit">Create event</button><a class="button button-quiet" href="{{ url_for('admin.overview') }}">Cancel</a></div>
+  </form>
+</section>
+{% endblock %}

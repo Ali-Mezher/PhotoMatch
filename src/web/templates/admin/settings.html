@@ -1,0 +1,21 @@
+{% extends "admin/base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<header class="page-header"><p class="eyebrow">Runtime configuration</p><h1>Matching and clustering</h1><p>These controls affect new attendee searches and future cluster runs. Existing indexes stay valid.</p></header>
+<div class="settings-layout">
+  <section class="form-panel">
+    <form action="{{ url_for('admin.update_settings') }}" method="post" class="stack-form">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <fieldset><legend>Attendee matching</legend>
+        <div class="field-pair"><label>Possible threshold<input type="number" name="possible_threshold" min="0" max="1" step="0.01" value="{{ settings.possible_threshold }}" required><small>Lowest score shown.</small></label><label>Confident threshold<input type="number" name="confident_threshold" min="0" max="1" step="0.01" value="{{ settings.confident_threshold }}" required><small>Must exceed possible.</small></label></div>
+        <label>Search candidates<input type="number" name="top_k" min="1" max="5000" value="{{ settings.top_k }}" required><small>Faces retrieved before photo deduplication and tiering.</small></label>
+      </fieldset>
+      <fieldset><legend>Identity clustering</legend>
+        <div class="field-pair"><label>Similarity<input type="number" name="cluster_similarity" min="0.5" max="0.95" step="0.01" value="{{ settings.cluster_similarity }}" required><small>Higher values form tighter groups.</small></label><label>Minimum group size<input type="number" name="min_cluster_size" min="2" max="20" value="{{ settings.min_cluster_size }}" required><small>Smaller sets remain unclustered.</small></label></div>
+      </fieldset>
+      <button class="button button-primary" type="submit">Save settings</button>
+    </form>
+  </section>
+  <aside class="settings-aside"><h2>Pipeline</h2><dl class="detail-list"><div><dt>Embedding model</dt><dd>{{ model }}</dd></div><div><dt>Index pipeline</dt><dd>Version {{ pipeline_version }}</dd></div></dl><p class="muted">Model selection is read-only here because changing it requires rebuilding every event index.</p><form action="{{ url_for('admin.reset_settings') }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="text-button danger-link" type="submit">Restore project defaults</button></form></aside>
+</div>
+{% endblock %}

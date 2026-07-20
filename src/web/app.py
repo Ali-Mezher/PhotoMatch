@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import secrets
+import atexit
 from dataclasses import dataclass
+from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -33,9 +36,14 @@ from src.indexing.build_index import (
 from src.indexing.faiss_index import INDEX_FILENAME, METADATA_FILENAME
 from src.matching import EventNotIndexedError, NoFaceDetectedError, match_selfie
 from src.services import IndexStatus
+from src.services.admin_store import AdminStore
+from src.services.clustering_service import ClusteringService
+from src.services.indexing_service import IndexingService
 from src.services.status_store import StatusStore
+from src.services.work_coordinator import AdminWorkCoordinator
 
 from .access import EventAccessGate
+from .admin import admin
 from .media import InvalidImageError, decode_selfie, render_watermarked_preview
 from .result_store import SearchResultStore, StoredPhoto, StoredSearch
 
@@ -46,13 +54,14 @@ class PublicEvent:
     event_date: str | None
     indexed: bool
     status: str
+    display_name: str | None = None
 
 
 def create_app(test_config: dict | None = None) -> Flask:
     """Create a configured Flask application for production or tests."""
     app = Flask(__name__)
     app.config.from_mapping(
-        SECRET_KEY=secrets.token_hex(32),
+        SECRET_KEY=os.environ.get("PHOTOMATCH_SECRET_KEY") or secrets.token_hex(32),
         MAX_CONTENT_LENGTH=12 * 1024 * 1024,
         EVENTS_DIR=EVENTS_DIR,
         INDEX_STATUS_DB=INDEX_STATUS_DB,
@@ -63,6 +72,18 @@ def create_app(test_config: dict | None = None) -> Flask:
         MATCHER=match_selfie,
         EVENT_CATALOG=None,
         RESULT_STORE=None,
+        ADMIN_USERNAME=os.environ.get("PHOTOMATCH_ADMIN_USERNAME"),
+        ADMIN_PASSWORD_HASH=os.environ.get("PHOTOMATCH_ADMIN_PASSWORD_HASH"),
+        ADMIN_START_WORKER=os.environ.get("PHOTOMATCH_BACKGROUND_WORKER", "1") == "1",
+        ADMIN_DEBUG=os.environ.get("PHOTOMATCH_DEBUG", "0") == "1",
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.environ.get("PHOTOMATCH_SECURE_COOKIE", "0") == "1",
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+        INDEXING_SERVICE=None,
+        ADMIN_STORE=None,
+        CLUSTERING_SERVICE=None,
+        WORK_COORDINATOR=None,
     )
     if test_config:
         app.config.update(test_config)
@@ -76,8 +97,91 @@ def create_app(test_config: dict | None = None) -> Flask:
             ttl_seconds=app.config["EVENT_ACCESS_TTL_SECONDS"]
         )
 
+    admin_store = app.config["ADMIN_STORE"] or AdminStore(
+        Path(app.config["INDEX_STATUS_DB"])
+    )
+    indexing = app.config["INDEXING_SERVICE"] or IndexingService(
+        events_dir=Path(app.config["EVENTS_DIR"]),
+        database_path=Path(app.config["INDEX_STATUS_DB"]),
+    )
+    if app.config["CLUSTERING_SERVICE"] is None:
+        from src.indexing.build_index import load_event_index_snapshot
+
+        events_dir = Path(app.config["EVENTS_DIR"])
+        clustering = ClusteringService(
+            admin_store,
+            snapshot_loader=lambda event_id: load_event_index_snapshot(
+                event_id, events_dir
+            ),
+        )
+    else:
+        clustering = app.config["CLUSTERING_SERVICE"]
+    coordinator = app.config["WORK_COORDINATOR"] or AdminWorkCoordinator(
+        indexing, clustering, admin_store
+    )
+    app.extensions["admin_store"] = admin_store
+    app.extensions["indexing_service"] = indexing
+    app.extensions["clustering_service"] = clustering
+    app.extensions["admin_work_coordinator"] = coordinator
+    app.extensions["admin_login_gate"] = EventAccessGate(
+        ttl_seconds=8 * 60 * 60,
+        max_failures=5,
+        failure_window_seconds=15 * 60,
+    )
+
+    app.add_template_filter(lambda value: Path(value).name, "basename")
+
+    if app.config["MATCHER"] is match_selfie:
+        def runtime_matcher(image, event_id):
+            settings = admin_store.get_settings()
+            return match_selfie(
+                image,
+                event_id,
+                top_k=settings.top_k,
+                possible_threshold=settings.possible_threshold,
+                confident_threshold=settings.confident_threshold,
+            )
+
+        app.config["MATCHER"] = runtime_matcher
+
     register_routes(app)
+    app.register_blueprint(admin)
+    register_security_headers(app)
+
+    if app.config["ADMIN_START_WORKER"] and not app.config.get("TESTING"):
+        should_start = not app.config["ADMIN_DEBUG"] or os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+        if should_start:
+            coordinator.start()
+            atexit.register(coordinator.shutdown)
+
+    register_cli(app)
     return app
+
+
+def register_security_headers(app: Flask) -> None:
+    @app.after_request
+    def apply_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' data: blob:; "
+            "style-src 'self'; script-src 'self'; connect-src 'self'; "
+            "form-action 'self'; frame-ancestors 'none'; base-uri 'self'",
+        )
+        return response
+
+
+def register_cli(app: Flask) -> None:
+    import click
+    from werkzeug.security import generate_password_hash
+
+    @app.cli.command("admin-password-hash")
+    @click.password_option(confirmation_prompt=True)
+    def admin_password_hash(password: str):
+        """Print a scrypt password hash for PHOTOMATCH_ADMIN_PASSWORD_HASH."""
+        click.echo(generate_password_hash(password))
 
 
 def register_routes(app: Flask) -> None:
@@ -385,6 +489,7 @@ def _default_event_catalog(
                     if summary
                     else IndexStatus.INDEXED.value if indexed else "not_indexed"
                 ),
+                display_name=summary.display_name if summary else event_id,
             )
         )
     return sorted(events, key=lambda item: (item.event_date or "9999-12-31", item.event_id))

@@ -43,7 +43,7 @@
       <span class="field-label">Event</span>
       <div class="event-confirmation">
         <span class="ready-indicator" aria-hidden="true"></span>
-        <strong>{{ unlocked_event.event_id }}</strong>
+        <strong>{{ unlocked_event.display_name or unlocked_event.event_id }}</strong>
         <span>Ready</span>
       </div>
       <a class="change-event-link" href="{{ url_for('home') }}">Use a Different Code</a>
