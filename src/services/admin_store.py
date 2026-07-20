@@ -196,7 +196,7 @@ class AdminStore:
         safe_details = {
             key: value
             for key, value in details.items()
-            if key not in {"password", "password_hash", "secret", "photo_path"}
+            if key not in {"password", "secret", "photo_path"}
         }
         with self._connect() as connection:
             connection.execute(

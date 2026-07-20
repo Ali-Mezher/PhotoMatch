@@ -23,7 +23,6 @@ from flask import (
     url_for,
 )
 from PIL import Image, ImageOps
-from werkzeug.security import check_password_hash
 
 from config import EMBEDDING_MODEL, EVENT_RAW_SUBDIR, INDEX_PIPELINE_VERSION
 from src.indexing.build_index import active_index_generation
@@ -78,7 +77,7 @@ def login():
         "admin/login.html",
         configured=bool(
             current_app.config.get("ADMIN_USERNAME")
-            and current_app.config.get("ADMIN_PASSWORD_HASH")
+            and current_app.config.get("ADMIN_PASSWORD")
         ),
     )
 
@@ -91,20 +90,20 @@ def login_submit():
         return render_template("admin/login.html", configured=True, error="Too many attempts. Try again in 15 minutes."), 429
 
     username = current_app.config.get("ADMIN_USERNAME")
-    password_hash = current_app.config.get("ADMIN_PASSWORD_HASH")
+    password = current_app.config.get("ADMIN_PASSWORD")
     supplied_username = request.form.get("username", "")
     supplied_password = request.form.get("password", "")
-    valid = bool(username and password_hash)
+    valid = bool(username and password)
     if valid:
-        valid = hmac.compare_digest(supplied_username, username) and check_password_hash(
-            password_hash, supplied_password
+        valid = hmac.compare_digest(supplied_username, username) and hmac.compare_digest(
+            supplied_password, password
         )
     if not valid:
         gate.record_failure(client_key)
         _admin_store().record_audit("login_failed")
         return render_template(
             "admin/login.html",
-            configured=bool(username and password_hash),
+            configured=bool(username and password),
             error="The username or password was not recognized.",
         ), 401
 
