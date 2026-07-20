@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}
+{% block title %}Identity groups{% endblock %}
+{% block content %}
+<header class="page-header split-header"><div><a class="back-link" href="{{ url_for('admin.event_detail', event_id=event.event_id) }}">← {{ event.display_name or event.event_id }}</a><h1>Identity groups</h1><p>Automated grouping is a review aid, not a verified statement of identity.</p></div><span class="status status-{{ run.status }}">{{ run.status }}</span></header>
+{% if run.status in ['queued', 'running'] %}<div class="processing-state" data-auto-refresh><span class="spinner"></span><h2>{{ 'Waiting to run' if run.status == 'queued' else 'Clustering faces' }}</h2><p>This page will update automatically. Indexing requests are completed first.</p></div>
+{% elif run.status == 'failed' %}<div class="notice notice-error"><strong>Clustering failed.</strong> {{ run.error }}</div>
+{% else %}
+<section class="summary-strip"><div><strong>{{ run.cluster_count }}</strong><span>Groups</span></div><div><strong>{{ groups.values()|map('length')|sum }}</strong><span>Faces reviewed</span></div><div><strong>{{ run.noise_count }}</strong><span>Unclustered</span></div><div><strong>{{ '%.2f'|format(run.similarity) }}</strong><span>Similarity</span></div></section>
+<div class="privacy-note"><strong>Use labels carefully.</strong> Personal names become stored biometric annotations. Prefer operational labels unless a name is necessary and permitted by your event policy.</div>
+{% for group_id, members in groups.items() %}
+<section class="cluster-group">
+  <header><div><p class="eyebrow">{{ 'Unclustered faces' if group_id == -1 else 'Group ' ~ (group_id + 1) }}</p><h2>{{ labels.get(group_id, '') or ('Needs individual review' if group_id == -1 else 'Unlabeled group') }}</h2><p>{{ members|length }} face{{ '' if members|length == 1 else 's' }}</p></div>
+  {% if group_id >= 0 %}<form action="{{ url_for('admin.label_cluster', event_id=event.event_id, run_id=run.run_id, cluster_label=group_id) }}" method="post" class="label-form"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><label><span class="sr-only">Optional group label</span><input name="label" maxlength="80" value="{{ labels.get(group_id, '') }}" placeholder="Optional label"></label><button class="button" type="submit">Save</button></form>{% endif %}</header>
+  <div class="face-grid">{% for member in members %}<figure class="face-card"><a href="{{ url_for('admin.cluster_face', event_id=event.event_id, run_id=run.run_id, face_index=member.face_index, context=1) }}" target="_blank"><img src="{{ url_for('admin.cluster_face', event_id=event.event_id, run_id=run.run_id, face_index=member.face_index) }}" alt="Detected face from {{ member.photo_path|basename }}" loading="lazy" width="240" height="240"></a><figcaption>{{ member.photo_path|basename }}<small>{{ '%.0f'|format(member.confidence * 100) }}% detection</small></figcaption></figure>{% endfor %}</div>
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

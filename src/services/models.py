@@ -39,6 +39,7 @@ class EventSummary:
     pending_images: int
     error: str | None = None
     updated_at: str | None = None
+    display_name: str | None = None
 
 
 @dataclass(frozen=True)

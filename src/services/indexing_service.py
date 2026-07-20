@@ -48,13 +48,18 @@ class IndexingService:
     def shutdown(self, wait: bool = True) -> None:
         self._manager.shutdown(wait=wait)
 
-    def register_event(self, event_id: str, event_date: str | date) -> EventSummary:
+    def register_event(
+        self,
+        event_id: str,
+        event_date: str | date,
+        display_name: str | None = None,
+    ) -> EventSummary:
         event_id = validate_event_id(event_id)
         normalized_date = self._normalize_date(event_date)
         raw_dir = self._raw_dir(event_id)
         if not raw_dir.exists():
             raise FileNotFoundError(f"Event raw directory does not exist: {raw_dir}")
-        self.store.register_event(event_id, normalized_date)
+        self.store.register_event(event_id, normalized_date, display_name)
         self.reconcile_event(event_id)
         return self.get_event(event_id)
 

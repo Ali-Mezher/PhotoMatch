@@ -85,6 +85,34 @@ sudo apt install python3-tk
 Full contributor workflow (branching, PRs, review): see
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+### Operator dashboard
+
+The authenticated local dashboard is available at `http://127.0.0.1:5000/admin/`.
+Before starting the app, configure one operator account and a stable Flask secret.
+Generate the password hash without storing a plaintext password in the repository:
+
+```powershell
+$env:FLASK_APP = "src.web:create_app"
+flask admin-password-hash
+```
+
+Then set the values for the current shell and launch the local server:
+
+```powershell
+$env:PHOTOMATCH_ADMIN_USERNAME = "operator"
+$env:PHOTOMATCH_ADMIN_PASSWORD_HASH = '<the generated scrypt hash>'
+$env:PHOTOMATCH_SECRET_KEY = '<a long random local secret>'
+python -m src.web
+```
+
+The dashboard creates events, imports JPG/PNG photos, queues incremental indexing,
+shows attendee codes, controls a validated subset of search settings, and runs
+review-only identity clustering. The worker is interrupt-driven and serializes
+indexing and clustering; it never scans on a timer. Set
+`PHOTOMATCH_BACKGROUND_WORKER=0` only when a separate process owns background work.
+Debug mode is off by default and can be explicitly enabled for local development with
+`PHOTOMATCH_DEBUG=1`.
+
 ## Running the tests
 
 ```bash
@@ -92,7 +120,8 @@ pip install pytest
 pytest tests/ -v
 ```
 
-130 tests across preprocessing, detection, indexing, matching, threshold tuning, and
+Tests across preprocessing, detection, indexing, matching, the Flask interfaces,
+clustering, threshold tuning, and
 evaluation — all run on synthetic data and need no model downloads or sample photos.
 Full detection/embedding inference needs `mtcnn` and `deepface`
 installed (already in `requirements.txt`) — see the integration-check
@@ -152,7 +181,7 @@ indexing.shutdown()
 Queued events run one at a time, ordered by their explicit event date (oldest
 first). `demo_goated_index_and_search.py index` uses this incremental path; pass
 `--force` only when a complete recovery rebuild is required. Starting and supervising
-the worker from the future staff/admin Flask interface remains follow-up work.
+the shared worker is now handled by the Flask operator dashboard.
 
 The threshold-tuning CSV needs `score` and `label` columns. Use
 `genuine` when both faces belong to the same person and `impostor` when

@@ -41,7 +41,12 @@ class EventNotIndexedError(ValueError):
 
 
 def match_selfie(
-    selfie_image: np.ndarray, event_id: str, top_k: int = DEFAULT_SEARCH_K
+    selfie_image: np.ndarray,
+    event_id: str,
+    top_k: int = DEFAULT_SEARCH_K,
+    *,
+    possible_threshold: float | None = None,
+    confident_threshold: float | None = None,
 ) -> dict[str, list[PhotoMatch]]:
     """
     Find a student's photos within one event, given a selfie.
@@ -96,7 +101,12 @@ def match_selfie(
 
     best_per_photo: dict[str, PhotoMatch] = {}
     for score, meta in zip(scores, metadata):
-        tier = classify_tier(score)
+        threshold_kwargs = {}
+        if possible_threshold is not None:
+            threshold_kwargs["possible_threshold"] = possible_threshold
+        if confident_threshold is not None:
+            threshold_kwargs["confident_threshold"] = confident_threshold
+        tier = classify_tier(score, **threshold_kwargs)
         if tier is None:
             continue
 
