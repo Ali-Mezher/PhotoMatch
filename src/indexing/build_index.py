@@ -19,7 +19,7 @@ from src.detection import detect_and_embed
 
 from .faiss_index import EventIndex, IndexedFace
 
-IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG")
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
 
 def build_event_index(event_id: str, show_progress: bool = True) -> EventIndex:
@@ -53,7 +53,7 @@ def build_event_index(event_id: str, show_progress: bool = True) -> EventIndex:
         )
 
     photo_paths = sorted(
-        p for p in raw_dir.iterdir() if p.suffix in IMAGE_EXTENSIONS
+        p for p in raw_dir.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
     )
     if not photo_paths:
         raise FileNotFoundError(
