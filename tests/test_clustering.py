@@ -73,6 +73,12 @@ def test_cluster_event_if_needed_reuses_saved_artifact(tmp_path, monkeypatch):
             {
                 "format_version": 1,
                 "event_id": "test_event",
+                "configuration": {
+                    "neighbors": 50,
+                    "edge_similarity": 0.68,
+                    "cohesion_similarity": 0.65,
+                    "min_cluster_size": 2,
+                },
                 "clusters": [],
                 "unclustered_count": 3,
             }
@@ -89,6 +95,45 @@ def test_cluster_event_if_needed_reuses_saved_artifact(tmp_path, monkeypatch):
 
     assert generated is False
     assert payload == load_cluster_artifact("test_event")
+
+
+def test_cluster_event_if_needed_refreshes_stale_configuration(tmp_path, monkeypatch):
+    event_path = tmp_path / "test_event"
+    artifact_path = event_path / "indexed" / "clusters.json"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "event_id": "test_event",
+                "configuration": {"edge_similarity": 0.75},
+                "clusters": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    refreshed = {
+        "format_version": 1,
+        "event_id": "test_event",
+        "configuration": {
+            "neighbors": 50,
+            "edge_similarity": 0.68,
+            "cohesion_similarity": 0.65,
+            "min_cluster_size": 2,
+        },
+        "clusters": [],
+    }
+    monkeypatch.setattr("src.clustering.clusterer.event_dir", lambda event_id: event_path)
+
+    def rebuild(event_id):
+        artifact_path.write_text(json.dumps(refreshed), encoding="utf-8")
+
+    monkeypatch.setattr("src.clustering.clusterer.cluster_event", rebuild)
+
+    payload, generated = cluster_event_if_needed("test_event")
+
+    assert generated is True
+    assert payload == refreshed
 
 
 @pytest.mark.parametrize(

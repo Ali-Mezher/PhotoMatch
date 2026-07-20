@@ -217,12 +217,24 @@ def load_cluster_artifact(event_id: str) -> dict:
 
 
 def cluster_event_if_needed(event_id: str) -> tuple[dict, bool]:
-    """Return saved clusters, or generate them once when none are saved."""
+    """Return saved clusters, regenerating them when defaults have changed."""
     try:
-        return load_cluster_artifact(event_id), False
+        payload = load_cluster_artifact(event_id)
+        if payload.get("configuration") == _default_configuration():
+            return payload, False
     except FileNotFoundError:
-        cluster_event(event_id)
-        return load_cluster_artifact(event_id), True
+        pass
+    cluster_event(event_id)
+    return load_cluster_artifact(event_id), True
+
+
+def _default_configuration() -> dict:
+    return {
+        "neighbors": CLUSTER_NEIGHBORS,
+        "edge_similarity": CLUSTER_EDGE_SIMILARITY,
+        "cohesion_similarity": CLUSTER_COHESION_SIMILARITY,
+        "min_cluster_size": CLUSTER_MIN_SIZE,
+    }
 
 
 def _member(face_index: int, metadata: IndexedFace) -> ClusterMember:

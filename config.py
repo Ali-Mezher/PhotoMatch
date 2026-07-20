@@ -61,8 +61,11 @@ EVENT_INDEXED_SUBDIR = "indexed"
 # Clustering is intentionally conservative: uncertain faces are left
 # unclustered for staff review instead of being forced into a wrong identity.
 CLUSTER_NEIGHBORS = 50
-CLUSTER_EDGE_SIMILARITY = 0.75
-CLUSTER_COHESION_SIMILARITY = 0.70
+# Permit natural variation in pose, lighting, and distance while preserving a
+# stricter direct-link threshold than the cohesion check. These values are a
+# staff-review starting point, not automatic identity verification.
+CLUSTER_EDGE_SIMILARITY = 0.68
+CLUSTER_COHESION_SIMILARITY = 0.65
 CLUSTER_MIN_SIZE = 2
 
 
