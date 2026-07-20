@@ -99,16 +99,16 @@ Once you have real (or stand-in) photos locally under
 python scripts/demo_pipeline.py path/to/photo.jpg
 
 # First index run (registers the event date in SQLite):
-python scripts/demo_index_and_search.py index my_event --date 2026-07-01
+python scripts/demo_goated_index_and_search.py index my_event --date 2026-07-01
 
 # Later runs process only newly added photos:
-python scripts/demo_index_and_search.py index my_event
+python scripts/demo_goated_index_and_search.py index my_event
 
 # Force a complete rebuild after manual recovery work:
-python scripts/demo_index_and_search.py index my_event --force
+python scripts/demo_goated_index_and_search.py index my_event --force
 
 # Search that event with a selfie, from the command line:
-python scripts/demo_index_and_search.py search my_event path/to/selfie.jpg
+python scripts/demo_goated_index_and_search.py search my_event path/to/selfie.jpg
 
 # Tune thresholds from labeled genuine/impostor similarity scores:
 python scripts/tune_thresholds.py path/to/scores.csv
@@ -141,7 +141,7 @@ indexing.shutdown()
 ```
 
 Queued events run one at a time, ordered by their explicit event date (oldest
-first). `demo_index_and_search.py index` uses this incremental path; pass
+first). `demo_goated_index_and_search.py index` uses this incremental path; pass
 `--force` only when a complete recovery rebuild is required. Flask integration
 is intentionally left to the web-interface branch.
 
