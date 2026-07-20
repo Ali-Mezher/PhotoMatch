@@ -6,10 +6,13 @@ FAISS itself is lightweight and doesn't require GPU/heavy deps.
 Run with: pytest tests/test_indexing.py -v
 """
 
+import json
+from dataclasses import dataclass
+
 import numpy as np
 import pytest
 
-from src.indexing import EventIndex, IndexedFace
+from src.indexing import EventIndex, IndexedFace, build_event_index, load_event_index
 
 
 def _normalize(v):
@@ -55,6 +58,23 @@ class TestEventIndex:
                 ],
             )
 
+    def test_add_rejects_wrong_dimension(self):
+        index = EventIndex(dim=8)
+        with pytest.raises(ValueError, match="shape"):
+            index.add(
+                [np.zeros(7, dtype=np.float32)],
+                [IndexedFace("a.jpg", (0, 0, 1, 1), 1.0)],
+            )
+
+    def test_add_normalizes_embeddings(self):
+        index = EventIndex(dim=2)
+        index.add(
+            [np.array([10.0, 0.0], dtype=np.float32)],
+            [IndexedFace("a.jpg", (0, 0, 1, 1), 1.0)],
+        )
+        scores, _ = index.search(np.array([2.0, 0.0], dtype=np.float32), k=1)
+        assert scores[0] == pytest.approx(1.0)
+
     def test_search_returns_closest_first(self, populated_index):
         index, target = populated_index
         scores, metadata = index.search(target, k=3)
@@ -87,3 +107,51 @@ class TestEventIndex:
     def test_load_missing_index_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             EventIndex.load(tmp_path / "does_not_exist")
+
+    def test_load_rejects_mismatched_metadata(self, populated_index, tmp_path):
+        index, _ = populated_index
+        index.save(tmp_path)
+        (tmp_path / "metadata.json").write_text(json.dumps([]))
+
+        with pytest.raises(ValueError, match="inconsistent"):
+            EventIndex.load(tmp_path)
+
+
+@dataclass
+class _FakeFace:
+    bbox: tuple[int, int, int, int]
+    confidence: float
+    embedding: np.ndarray
+
+
+def test_event_index_end_to_end(tmp_path, monkeypatch):
+    """Build, save, load, and query one event through the public API."""
+    event_root = tmp_path / "events" / "graduation"
+    raw_dir = event_root / "raw"
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "group.JPG").write_bytes(b"test image placeholder")
+
+    embedding = np.zeros(512, dtype=np.float32)
+    embedding[0] = 1.0
+
+    monkeypatch.setattr(
+        "src.indexing.build_index.event_dir", lambda event_id: tmp_path / "events" / event_id
+    )
+    monkeypatch.setattr(
+        "src.indexing.build_index.cv2.imread",
+        lambda path: np.zeros((20, 20, 3), dtype=np.uint8),
+    )
+    monkeypatch.setattr("src.indexing.build_index.preprocess_image", lambda image: image)
+    monkeypatch.setattr(
+        "src.indexing.build_index.detect_and_embed",
+        lambda image: [_FakeFace((1, 2, 10, 12), 0.98, embedding)],
+    )
+
+    built = build_event_index("graduation", show_progress=False)
+    loaded = load_event_index("graduation")
+    scores, metadata = loaded.search(embedding, k=1)
+
+    assert len(built) == len(loaded) == 1
+    assert scores[0] == pytest.approx(1.0)
+    assert metadata[0].photo_path.endswith("group.JPG")
+    assert tuple(metadata[0].bbox) == (1, 2, 10, 12)

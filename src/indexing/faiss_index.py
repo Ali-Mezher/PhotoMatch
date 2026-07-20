@@ -63,7 +63,21 @@ class EventIndex:
         if not embeddings:
             return
 
-        vectors = np.vstack(embeddings).astype(np.float32)
+        vectors = np.asarray(embeddings, dtype=np.float32)
+        if vectors.ndim != 2 or vectors.shape[1] != self.dim:
+            raise ValueError(
+                f"add: expected embeddings with shape (n, {self.dim}), "
+                f"got {vectors.shape}"
+            )
+        if not np.isfinite(vectors).all():
+            raise ValueError("add: embeddings must contain only finite values")
+
+        # Keep cosine search correct even when an upstream caller provides
+        # embeddings that have not already been normalized.
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        if np.any(norms == 0):
+            raise ValueError("add: zero-length embeddings cannot be indexed")
+        vectors = np.ascontiguousarray(vectors / norms, dtype=np.float32)
         self.index.add(vectors)
         self.metadata.extend(metadata)
 
@@ -84,11 +98,24 @@ class EventIndex:
             practice [0, 1] for face embeddings). Fewer than k results
             are returned if the index has fewer than k faces.
         """
+        if k <= 0:
+            raise ValueError("search: k must be greater than zero")
         if len(self.metadata) == 0:
             return [], []
 
         k = min(k, len(self.metadata))
-        query = query_embedding.astype(np.float32).reshape(1, -1)
+        query = np.asarray(query_embedding, dtype=np.float32)
+        if query.ndim != 1 or query.shape[0] != self.dim:
+            raise ValueError(
+                f"search: expected an embedding with shape ({self.dim},), "
+                f"got {query.shape}"
+            )
+        if not np.isfinite(query).all():
+            raise ValueError("search: embedding must contain only finite values")
+        norm = np.linalg.norm(query)
+        if norm == 0:
+            raise ValueError("search: a zero-length embedding cannot be searched")
+        query = np.ascontiguousarray((query / norm).reshape(1, -1), dtype=np.float32)
         scores, indices = self.index.search(query, k)
 
         result_scores = []
@@ -139,6 +166,12 @@ class EventIndex:
         with open(metadata_path) as f:
             raw_metadata = json.load(f)
         instance.metadata = [IndexedFace(**m) for m in raw_metadata]
+
+        if faiss_index.ntotal != len(instance.metadata):
+            raise ValueError(
+                "Saved index is inconsistent: "
+                f"{faiss_index.ntotal} vectors but {len(instance.metadata)} metadata entries"
+            )
 
         return instance
 
