@@ -63,7 +63,7 @@ pip install pytest
 pytest tests/ -v
 ```
 
-36 tests across preprocessing, detection, indexing, and matching — all
+88 tests across preprocessing, detection, indexing, matching, and threshold tuning — all
 run on synthetic data and need no model downloads or sample photos.
 Full detection/embedding inference needs `mtcnn` and `deepface`
 installed (already in `requirements.txt`) — see the integration-check
@@ -84,9 +84,25 @@ python scripts/demo_index_and_search.py index my_event
 # Search that event with a selfie, from the command line:
 python scripts/demo_index_and_search.py search my_event path/to/selfie.jpg
 
+# Tune thresholds from labeled genuine/impostor similarity scores:
+python scripts/tune_thresholds.py path/to/scores.csv
+
 # Or launch the full kiosk app:
 python -m src.interface.app
 ```
+
+The threshold-tuning CSV needs `score` and `label` columns. Use
+`genuine` when both faces belong to the same person and `impostor` when
+they belong to different people:
+
+```csv
+score,label
+0.86,genuine
+0.42,impostor
+```
+
+The tool reports FAR and FRR and recommends values for `config.py`; it
+does not change production thresholds automatically.
 
 ## Data & privacy
 
