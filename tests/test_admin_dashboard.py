@@ -6,8 +6,6 @@ from io import BytesIO
 import sqlite3
 
 from PIL import Image
-from werkzeug.security import generate_password_hash
-
 from src.services.admin_store import AdminStore, RuntimeSettings
 from src.services.status_store import StatusStore
 from src.web import create_app
@@ -21,7 +19,7 @@ def _app(tmp_path):
             "EVENTS_DIR": tmp_path / "events",
             "INDEX_STATUS_DB": tmp_path / "status.sqlite3",
             "ADMIN_USERNAME": "operator",
-            "ADMIN_PASSWORD_HASH": generate_password_hash("correct horse"),
+            "ADMIN_PASSWORD": "correct horse",
             "ADMIN_START_WORKER": False,
         }
     )

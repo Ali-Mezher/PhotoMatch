@@ -73,7 +73,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         EVENT_CATALOG=None,
         RESULT_STORE=None,
         ADMIN_USERNAME=os.environ.get("PHOTOMATCH_ADMIN_USERNAME"),
-        ADMIN_PASSWORD_HASH=os.environ.get("PHOTOMATCH_ADMIN_PASSWORD_HASH"),
+        ADMIN_PASSWORD=os.environ.get("PHOTOMATCH_ADMIN_PASSWORD"),
         ADMIN_START_WORKER=os.environ.get("PHOTOMATCH_BACKGROUND_WORKER", "1") == "1",
         ADMIN_DEBUG=os.environ.get("PHOTOMATCH_DEBUG", "0") == "1",
         SESSION_COOKIE_HTTPONLY=True,
@@ -154,7 +154,6 @@ def create_app(test_config: dict | None = None) -> Flask:
             coordinator.start()
             atexit.register(coordinator.shutdown)
 
-    register_cli(app)
     return app
 
 
@@ -171,17 +170,6 @@ def register_security_headers(app: Flask) -> None:
             "form-action 'self'; frame-ancestors 'none'; base-uri 'self'",
         )
         return response
-
-
-def register_cli(app: Flask) -> None:
-    import click
-    from werkzeug.security import generate_password_hash
-
-    @app.cli.command("admin-password-hash")
-    @click.password_option(confirmation_prompt=True)
-    def admin_password_hash(password: str):
-        """Print a scrypt password hash for PHOTOMATCH_ADMIN_PASSWORD_HASH."""
-        click.echo(generate_password_hash(password))
 
 
 def register_routes(app: Flask) -> None:

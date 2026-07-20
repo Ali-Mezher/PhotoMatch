@@ -88,19 +88,12 @@ Full contributor workflow (branching, PRs, review): see
 ### Operator dashboard
 
 The authenticated local dashboard is available at `http://127.0.0.1:5000/admin/`.
-Before starting the app, configure one operator account and a stable Flask secret.
-Generate the password hash without storing a plaintext password in the repository:
-
-```powershell
-$env:FLASK_APP = "src.web:create_app"
-flask admin-password-hash
-```
-
-Then set the values for the current shell and launch the local server:
+Before starting the app, configure one operator account and a stable Flask secret for
+the current PowerShell session:
 
 ```powershell
 $env:PHOTOMATCH_ADMIN_USERNAME = "operator"
-$env:PHOTOMATCH_ADMIN_PASSWORD_HASH = '<the generated scrypt hash>'
+$env:PHOTOMATCH_ADMIN_PASSWORD = 'choose-a-password'
 $env:PHOTOMATCH_SECRET_KEY = '<a long random local secret>'
 python -m src.web
 ```
