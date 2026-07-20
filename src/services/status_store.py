@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import secrets
 import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 
 from .models import EventSummary, ImageIndexOutcome, ImageIndexStatus, IndexStatus
+
+EVENT_ACCESS_CODE_LENGTH = 8
+_HEX_CHARACTERS = frozenset("0123456789ABCDEF")
+
+
+def normalize_event_access_code(value: str) -> str:
+    """Normalize the human-entered representation of an event access code."""
+    if not isinstance(value, str):
+        return ""
+    return "".join(character for character in value.upper() if character not in " -")
 
 
 class StatusStore:
@@ -57,8 +68,20 @@ class StatusStore:
                     ON events(status, event_date, created_at);
                 CREATE INDEX IF NOT EXISTS idx_images_status
                     ON images(event_id, status);
+
+                CREATE TABLE IF NOT EXISTS event_access_codes (
+                    event_id TEXT PRIMARY KEY,
+                    access_code TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (event_id) REFERENCES events(event_id)
+                        ON DELETE CASCADE
+                );
                 """
             )
+            event_ids = connection.execute("SELECT event_id FROM events").fetchall()
+            for row in event_ids:
+                self._ensure_event_access_code(connection, row["event_id"])
 
     def register_event(self, event_id: str, event_date: str) -> None:
         with self._connect() as connection:
@@ -72,6 +95,68 @@ class StatusStore:
                 """,
                 (event_id, event_date, IndexStatus.PENDING.value),
             )
+            self._ensure_event_access_code(connection, event_id)
+
+    def get_event_access_code(self, event_id: str) -> str | None:
+        """Return the public access code for a registered event."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT access_code FROM event_access_codes WHERE event_id = ?",
+                (event_id,),
+            ).fetchone()
+        return row["access_code"] if row else None
+
+    def find_event_id_by_access_code(self, access_code: str) -> str | None:
+        """Resolve a valid code without exposing the event catalog to the web layer."""
+        candidate = normalize_event_access_code(access_code)
+        if (
+            len(candidate) != EVENT_ACCESS_CODE_LENGTH
+            or any(character not in _HEX_CHARACTERS for character in candidate)
+        ):
+            return None
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT event_id, access_code FROM event_access_codes"
+            ).fetchall()
+
+        matched_event_id = None
+        for row in rows:
+            if secrets.compare_digest(row["access_code"], candidate):
+                matched_event_id = row["event_id"]
+        return matched_event_id
+
+    @staticmethod
+    def _ensure_event_access_code(
+        connection: sqlite3.Connection, event_id: str
+    ) -> str:
+        existing = connection.execute(
+            "SELECT access_code FROM event_access_codes WHERE event_id = ?",
+            (event_id,),
+        ).fetchone()
+        if existing:
+            return existing["access_code"]
+
+        for _attempt in range(100):
+            access_code = secrets.token_hex(EVENT_ACCESS_CODE_LENGTH // 2).upper()
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO event_access_codes(event_id, access_code)
+                    VALUES (?, ?)
+                    """,
+                    (event_id, access_code),
+                )
+            except sqlite3.IntegrityError:
+                existing = connection.execute(
+                    "SELECT access_code FROM event_access_codes WHERE event_id = ?",
+                    (event_id,),
+                ).fetchone()
+                if existing:
+                    return existing["access_code"]
+                continue
+            return access_code
+        raise RuntimeError("Could not allocate a unique event access code")
 
     def get_event(self, event_id: str) -> EventSummary | None:
         with self._connect() as connection:

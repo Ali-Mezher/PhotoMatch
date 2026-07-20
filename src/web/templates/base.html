@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f8f8">
+    <title>{% block title %}PhotoMatch{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="{{ url_for('home') }}" aria-label="PhotoMatch home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>PhotoMatch</span>
+      </a>
+      <span class="local-note">Local event photo search</span>
+    </header>
+
+    <main id="main-content">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+      <p>Your selfie is processed in memory for this search and is not saved.</p>
+    </footer>
+  </body>
+</html>
