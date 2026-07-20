@@ -40,6 +40,18 @@
 
 ---
 
+## Week 5 — Deployment Readiness & Extensions
+| Issue | Task | Ownership | Status | Notes |
+|-------|------|-----------|--------|-------|
+| #16 | Privacy: consent, secure biometric storage & retention/deletion policy | — | ⬜ Not started | Document consent procedures, local storage protections, access controls, and when selfies, embeddings, and event data must be deleted. |
+| #17 | Validation: scalability & fully offline operation | — | ⬜ Not started | Verify that indexing and search require no cloud services, then benchmark representative indexes up to 50,000–100,000 photos. |
+| #18 | Validation: real-event robustness testing | — | ⬜ Not started | Test varied lighting, angles, motion blur, group photos, caps/gowns, partial occlusion, and detection failures using representative event photos. |
+| #19 | Evaluation: manual vs automatic time savings | — | ⬜ Not started | Compare end-to-end selfie search time with the current 5–6 hour manual-search baseline and document the improvement. |
+| #20 | Security: liveness / anti-spoofing *(stretch goal)* | — | ⬜ Not started | Add and evaluate a basic blink, motion, or texture-based check to reduce searches using another person's photograph. |
+| #21 | Interface: watermarked previews & admin dashboard *(stretch goal)* | — | ⬜ Not started | Show protected previews and give staff indexing status, failed-job retry, and manual review controls. |
+
+---
+
 ## Team
 | Name | ID | Role |
 |------|----|------|
