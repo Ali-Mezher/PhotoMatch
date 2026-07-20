@@ -32,11 +32,11 @@
 ## Week 4 — Evaluation & Validation
 | Issue | Task | Ownership | Status | Notes |
 |-------|------|-----------|--------|-------|
-| [#13](https://github.com/Ali-Mezher/PhotoMatch/issues/13) | Evaluation: precision/recall @ top-k & query time | — | ⬜ Not started | |
-| [#14](https://github.com/Ali-Mezher/PhotoMatch/issues/14) | Evaluation: FAR & FRR benchmarks | — | ⬜ Not started | |
-| #15 | Validation: scalability & fully offline operation | — | ⬜ Not started | Verify that indexing and search require no cloud services, then benchmark representative indexes up to 50,000–100,000 photos. |
-| #16 | Validation: real-event robustness testing | — | ⬜ Not started | Test varied lighting, angles, motion blur, group photos, caps/gowns, partial occlusion, and detection failures using representative event photos. |
-| #17 | Evaluation: manual vs automatic time savings | — | ⬜ Not started | Compare end-to-end selfie search time with the current 5–6 hour manual-search baseline and document the improvement. |
+| [#13](https://github.com/Ali-Mezher/PhotoMatch/issues/13) | Evaluation: precision/recall @ top-k & query time | Ahmad AlAli & Mahmood Tendail | 🔧 Tooling ready | `src/evaluation/benchmark.py` runs real selfies through the full pipeline and computes precision/recall@k + timing; needs real (or realistic stand-in) photos dropped into `data/evaluation/` to produce real numbers — see `data/evaluation/README.md`. |
+| [#14](https://github.com/Ali-Mezher/PhotoMatch/issues/14) | Evaluation: FAR & FRR benchmarks | Ahmad AlAli & Mahmood Tendail | 🔧 Tooling ready | `threshold_tuning.py` (tested) + `run_evaluation.py` now feed it real genuine/impostor scores collected from `benchmark.py`, not just the toy `scores.csv`; run against real data to get production threshold values for `config.py`. |
+| #15 | Validation: scalability & fully offline operation | Mahmood Tendail | 🔧 Tooling ready | `src/evaluation/scalability.py` benchmarks FAISS at up to 100,000 synthetic faces and includes an automated check that indexing/matching make no network calls. Run `python scripts/run_evaluation.py <event_id> --scalability`. |
+| #16 | Validation: real-event robustness testing | — | 🔧 Tooling ready | The evaluation report flags the lowest-recall identities per run as a starting point for manual review — actually reviewing *why* (lighting, angle, occlusion, blur, group photos) needs real event photos and a human look. |
+| #17 | Evaluation: manual vs automatic time savings | Mahmood Tendail | 🔧 Tooling ready | `time_savings.py` compares a real measured query time against the proposal's 5-6 hour manual baseline; `run_evaluation.py` prints and reports this automatically once a benchmark has run. |
 
 ---
 
