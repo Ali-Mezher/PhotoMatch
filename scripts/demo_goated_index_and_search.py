@@ -62,6 +62,7 @@ def run_index(
     queued = service.get_event(event_id)
     if queued.status is not IndexStatus.QUEUED:
         print(f"Event '{event_id}' is already up to date; no photos were reprocessed.")
+        _print_event_access_code(service, event_id)
         return 0
 
     if force or queued.rebuild_required:
@@ -86,7 +87,14 @@ def run_index(
         f"{completed.no_face_images} with no face, "
         f"{completed.failed_images} failed."
     )
+    _print_event_access_code(service, event_id)
     return 0
+
+
+def _print_event_access_code(service: IndexingService, event_id: str) -> None:
+    access_code = service.get_event_access_code(event_id)
+    grouped_code = f"{access_code[:4]}-{access_code[4:]}"
+    print(f"Attendee event code: {grouped_code}")
 
 
 def run_search(event_id: str, selfie_path: str):

@@ -82,6 +82,19 @@ def test_registration_rejects_unsafe_event_id_and_invalid_date(tmp_path):
         service.register_event("graduation", "July 1")
 
 
+def test_registration_assigns_a_stable_attendee_access_code(tmp_path):
+    service, _, events_dir = _service(tmp_path)
+    _add_photo(events_dir, "graduation", "one.jpg")
+
+    service.register_event("graduation", "2026-07-01")
+    first_code = service.get_event_access_code("graduation")
+    service.register_event("graduation", "2026-07-02")
+
+    assert len(first_code) == 8
+    assert set(first_code) <= set("0123456789ABCDEF")
+    assert service.get_event_access_code("graduation") == first_code
+
+
 def test_demo_index_command_uses_incremental_service(monkeypatch):
     class FakeService:
         def __init__(self):
@@ -114,6 +127,9 @@ def test_demo_index_command_uses_incremental_service(monkeypatch):
 
         def run_pending(self, show_progress):
             self.ran = show_progress
+
+        def get_event_access_code(self, event_id):
+            return "A1B2C3D4"
 
     service = FakeService()
     monkeypatch.setattr(demo_script, "IndexingService", lambda: service)

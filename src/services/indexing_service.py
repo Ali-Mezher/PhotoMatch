@@ -148,6 +148,14 @@ class IndexingService:
             raise KeyError(f"Unknown event: {event_id}")
         return event
 
+    def get_event_access_code(self, event_id: str) -> str:
+        """Return the attendee access code assigned when the event was registered."""
+        event_id = self._require_registered_event(event_id)
+        access_code = self.store.get_event_access_code(event_id)
+        if access_code is None:
+            raise RuntimeError(f"Event '{event_id}' has no access code")
+        return access_code
+
     def list_image_statuses(self, event_id: str) -> list[ImageIndexStatus]:
         event_id = self._require_registered_event(event_id)
         return self.store.list_images(event_id)

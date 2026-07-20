@@ -67,8 +67,17 @@ source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-The interface (`src/interface/`) uses Tkinter, which ships with Python
-on Windows and macOS. On Linux you may need to install it separately:
+The public attendee interface uses Flask. Launch it locally with:
+
+```bash
+python -m src.web
+```
+
+Then open `http://127.0.0.1:5000`. The server binds to localhost in this
+development entry point. Attendees enter the 8-character code printed by the event's
+index command; events are not listed on the public page. The existing desktop interface
+(`src/interface/`) remains available during web-interface review and uses Tkinter, which
+ships with Python on Windows and macOS. On Linux you may need to install it separately:
 ```bash
 sudo apt install python3-tk
 ```
@@ -98,7 +107,7 @@ Once you have real (or stand-in) photos locally under
 # Run preprocess -> detect -> embed on a single photo:
 python scripts/demo_pipeline.py path/to/photo.jpg
 
-# First index run (registers the event date in SQLite):
+# First index run (registers the event date and prints its attendee code):
 python scripts/demo_goated_index_and_search.py index my_event --date 2026-07-01
 
 # Later runs process only newly added photos:
@@ -142,8 +151,8 @@ indexing.shutdown()
 
 Queued events run one at a time, ordered by their explicit event date (oldest
 first). `demo_goated_index_and_search.py index` uses this incremental path; pass
-`--force` only when a complete recovery rebuild is required. Flask integration
-is intentionally left to the web-interface branch.
+`--force` only when a complete recovery rebuild is required. Starting and supervising
+the worker from the future staff/admin Flask interface remains follow-up work.
 
 The threshold-tuning CSV needs `score` and `label` columns. Use
 `genuine` when both faces belong to the same person and `impostor` when
