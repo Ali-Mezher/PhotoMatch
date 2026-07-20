@@ -6,7 +6,9 @@ from .clusterer import (
     ClusterResult,
     FaceCluster,
     cluster_event,
+    cluster_event_if_needed,
     cluster_index,
+    load_cluster_artifact,
 )
 
 __all__ = [
@@ -15,5 +17,7 @@ __all__ = [
     "ClusterResult",
     "FaceCluster",
     "cluster_event",
+    "cluster_event_if_needed",
     "cluster_index",
+    "load_cluster_artifact",
 ]

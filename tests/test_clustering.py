@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from src.clustering import cluster_event, cluster_index
+from src.clustering import cluster_event, cluster_event_if_needed, cluster_index, load_cluster_artifact
 from src.indexing import EventIndex, IndexedFace
 
 
@@ -62,6 +62,33 @@ def test_cluster_event_writes_staff_review_artifact(tmp_path, monkeypatch):
     assert payload["event_id"] == "test_event"
     assert payload["cluster_count"] == len(result.clusters) == 1
     assert payload["clusters"][0]["members"][0]["photo_path"] == "photo_0.jpg"
+
+
+def test_cluster_event_if_needed_reuses_saved_artifact(tmp_path, monkeypatch):
+    event_path = tmp_path / "test_event"
+    artifact_path = event_path / "indexed" / "clusters.json"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "event_id": "test_event",
+                "clusters": [],
+                "unclustered_count": 3,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("src.clustering.clusterer.event_dir", lambda event_id: event_path)
+    monkeypatch.setattr(
+        "src.clustering.clusterer.cluster_event",
+        lambda event_id: pytest.fail("existing artifacts must not be recalculated"),
+    )
+
+    payload, generated = cluster_event_if_needed("test_event")
+
+    assert generated is False
+    assert payload == load_cluster_artifact("test_event")
 
 
 @pytest.mark.parametrize(

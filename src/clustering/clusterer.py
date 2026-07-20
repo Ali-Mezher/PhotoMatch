@@ -191,6 +191,40 @@ def cluster_event(event_id: str, **parameters) -> tuple[ClusterResult, Path]:
     return result, destination
 
 
+def load_cluster_artifact(event_id: str) -> dict:
+    """Load a previously generated clustering artifact for an event.
+
+    The artifact is deliberately the cache boundary for the desktop UI: once
+    staff have reviewed a set of candidate groups, pressing Cluster again
+    should present that same set instead of silently recalculating it.
+    """
+    source = event_dir(event_id) / EVENT_INDEXED_SUBDIR / CLUSTERS_FILENAME
+    if not source.exists():
+        raise FileNotFoundError(f"No clustering results exist for event '{event_id}'.")
+
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Saved clustering results for '{event_id}' are invalid.") from exc
+
+    if payload.get("format_version") != CLUSTER_FORMAT_VERSION:
+        raise ValueError(f"Saved clustering results for '{event_id}' use an unsupported format.")
+    if payload.get("event_id") != event_id:
+        raise ValueError("Saved clustering results belong to a different event.")
+    if not isinstance(payload.get("clusters"), list):
+        raise ValueError(f"Saved clustering results for '{event_id}' are incomplete.")
+    return payload
+
+
+def cluster_event_if_needed(event_id: str) -> tuple[dict, bool]:
+    """Return saved clusters, or generate them once when none are saved."""
+    try:
+        return load_cluster_artifact(event_id), False
+    except FileNotFoundError:
+        cluster_event(event_id)
+        return load_cluster_artifact(event_id), True
+
+
 def _member(face_index: int, metadata: IndexedFace) -> ClusterMember:
     return ClusterMember(face_index, metadata.photo_path, tuple(metadata.bbox), metadata.confidence)
 
