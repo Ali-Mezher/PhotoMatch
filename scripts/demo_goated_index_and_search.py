@@ -6,16 +6,16 @@ debugging a specific event without launching the kiosk app.
 
 Usage:
     # First incremental run (event date is stored in SQLite):
-    python scripts/demo_index_and_search.py index <event_id> --date YYYY-MM-DD
+    python scripts/demo_goated_index_and_search.py index <event_id> --date YYYY-MM-DD
 
     # Later runs process only new/changed work:
-    python scripts/demo_index_and_search.py index <event_id>
+    python scripts/demo_goated_index_and_search.py index <event_id>
 
     # Explicit recovery rebuild:
-    python scripts/demo_index_and_search.py index <event_id> --force
+    python scripts/demo_goated_index_and_search.py index <event_id> --force
 
     # Search an already-indexed event with a selfie:
-    python scripts/demo_index_and_search.py search <event_id> path/to/selfie.jpg
+    python scripts/demo_goated_index_and_search.py search <event_id> path/to/selfie.jpg
 
 Expects photos at: data/events/<event_id>/raw/*.jpg
 """
@@ -45,7 +45,7 @@ def run_index(
                 "run needs an explicit event date:"
             )
             print(
-                "  python scripts/demo_index_and_search.py index "
+                "  python scripts/demo_goated_index_and_search.py index "
                 f"{event_id} --date YYYY-MM-DD"
             )
             return 2
@@ -102,7 +102,7 @@ def run_search(event_id: str, selfie_path: str):
         sys.exit(1)
     except EventNotIndexedError:
         print(f"Event '{event_id}' hasn't been indexed yet. Run:")
-        print(f"  python scripts/demo_index_and_search.py index {event_id}")
+        print(f"  python scripts/demo_goated_index_and_search.py index {event_id}")
         sys.exit(1)
 
     print(f"\nConfident matches ({len(results['confident'])}):")

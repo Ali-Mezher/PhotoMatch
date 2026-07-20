@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from scripts import demo_index_and_search as demo_script
+from scripts import demo_goated_index_and_search as demo_script
 from src.indexing import IndexBuildOutcome, load_event_index, update_event_index
 from src.services import IndexStatus, IndexingService
 from src.services.indexing_manager import IndexingManager
