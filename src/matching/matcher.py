@@ -40,7 +40,9 @@ class EventNotIndexedError(ValueError):
     """Raised when the requested event has no built index yet."""
 
 
-def match_selfie(selfie_image: np.ndarray, event_id: str, top_k: int = DEFAULT_SEARCH_K) -> dict:
+def match_selfie(
+    selfie_image: np.ndarray, event_id: str, top_k: int = DEFAULT_SEARCH_K
+) -> dict[str, list[PhotoMatch]]:
     """
     Find a student's photos within one event, given a selfie.
 
@@ -67,6 +69,9 @@ def match_selfie(selfie_image: np.ndarray, event_id: str, top_k: int = DEFAULT_S
         EventNotIndexedError: if the event hasn't been indexed yet —
             the interface layer should show a "not ready" message.
     """
+    if top_k <= 0:
+        raise ValueError("match_selfie: top_k must be greater than zero")
+
     cleaned = preprocess_image(selfie_image)
     faces = detect_and_embed(cleaned)
 
