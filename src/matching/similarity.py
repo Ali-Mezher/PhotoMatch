@@ -29,6 +29,18 @@ def cosine_similarity(embedding_a: np.ndarray, embedding_b: np.ndarray) -> float
         Similarity in [-1, 1] — in practice [0, 1] for face embeddings
         from the same model.
     """
+    embedding_a = np.asarray(embedding_a, dtype=np.float32)
+    embedding_b = np.asarray(embedding_b, dtype=np.float32)
+    if embedding_a.ndim != 1 or embedding_b.ndim != 1:
+        raise ValueError("cosine_similarity: embeddings must be one-dimensional")
+    if embedding_a.shape != embedding_b.shape:
+        raise ValueError(
+            "cosine_similarity: embeddings must have the same dimensions, "
+            f"got {embedding_a.shape} and {embedding_b.shape}"
+        )
+    if not np.isfinite(embedding_a).all() or not np.isfinite(embedding_b).all():
+        raise ValueError("cosine_similarity: embeddings must contain only finite values")
+
     norm_a = np.linalg.norm(embedding_a)
     norm_b = np.linalg.norm(embedding_b)
     if norm_a == 0 or norm_b == 0:
