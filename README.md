@@ -98,8 +98,14 @@ Once you have real (or stand-in) photos locally under
 # Run preprocess -> detect -> embed on a single photo:
 python scripts/demo_pipeline.py path/to/photo.jpg
 
-# Build the searchable index for an event:
+# First index run (registers the event date in SQLite):
+python scripts/demo_index_and_search.py index my_event --date 2026-07-01
+
+# Later runs process only newly added photos:
 python scripts/demo_index_and_search.py index my_event
+
+# Force a complete rebuild after manual recovery work:
+python scripts/demo_index_and_search.py index my_event --force
 
 # Search that event with a selfie, from the command line:
 python scripts/demo_index_and_search.py search my_event path/to/selfie.jpg
@@ -135,9 +141,9 @@ indexing.shutdown()
 ```
 
 Queued events run one at a time, ordered by their explicit event date (oldest
-first). The existing `demo_index_and_search.py index` command remains a forced
-full rebuild for manual operation and recovery. Flask integration is
-intentionally left to the web-interface branch.
+first). `demo_index_and_search.py index` uses this incremental path; pass
+`--force` only when a complete recovery rebuild is required. Flask integration
+is intentionally left to the web-interface branch.
 
 The threshold-tuning CSV needs `score` and `label` columns. Use
 `genuine` when both faces belong to the same person and `impostor` when

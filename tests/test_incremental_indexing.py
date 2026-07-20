@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+from scripts import demo_index_and_search as demo_script
 from src.indexing import IndexBuildOutcome, load_event_index, update_event_index
 from src.services import IndexStatus, IndexingService
 from src.services.indexing_manager import IndexingManager
@@ -78,6 +80,47 @@ def test_registration_rejects_unsafe_event_id_and_invalid_date(tmp_path):
         service.register_event("../graduation", "2026-07-01")
     with pytest.raises(ValueError, match="ISO date"):
         service.register_event("graduation", "July 1")
+
+
+def test_demo_index_command_uses_incremental_service(monkeypatch):
+    class FakeService:
+        def __init__(self):
+            self.get_calls = 0
+            self.requested = False
+            self.ran = False
+
+        def get_event(self, event_id):
+            self.get_calls += 1
+            statuses = {
+                1: SimpleNamespace(status=IndexStatus.INDEXED),
+                2: SimpleNamespace(
+                    status=IndexStatus.QUEUED,
+                    rebuild_required=False,
+                    pending_images=1,
+                    total_images=5,
+                ),
+                3: SimpleNamespace(
+                    status=IndexStatus.INDEXED,
+                    indexed_images=4,
+                    no_face_images=1,
+                    failed_images=0,
+                    error=None,
+                ),
+            }
+            return statuses[self.get_calls]
+
+        def request_index(self, event_id):
+            self.requested = True
+
+        def run_pending(self, show_progress):
+            self.ran = show_progress
+
+    service = FakeService()
+    monkeypatch.setattr(demo_script, "IndexingService", lambda: service)
+
+    assert demo_script.run_index("graduation") == 0
+    assert service.requested is True
+    assert service.ran is True
 
 
 def test_duplicate_queue_requests_are_coalesced(tmp_path):
@@ -162,6 +205,35 @@ def test_existing_index_is_rebuilt_when_sql_inventory_is_first_adopted(tmp_path)
     service._drain_queue()
 
     assert updater.calls == [("graduation", [photo], True)]
+
+
+def test_readable_legacy_index_is_adopted_without_reprocessing(tmp_path):
+    updater = _FakeUpdater()
+    events_dir = tmp_path / "events"
+    photo = _add_photo(events_dir, "graduation", "one.jpg")
+    updater.indexed_events.add("graduation")
+    legacy_index = SimpleNamespace(
+        metadata=[
+            SimpleNamespace(photo_path=str(photo)),
+            SimpleNamespace(photo_path=str(photo)),
+        ]
+    )
+    service = IndexingService(
+        events_dir=events_dir,
+        database_path=tmp_path / "status.sqlite3",
+        index_updater=updater,
+        index_exists=updater.exists,
+        index_loader=lambda event_id: legacy_index,
+    )
+
+    event = service.register_event("graduation", "2026-07-01")
+
+    assert event.status is IndexStatus.INDEXED
+    assert event.rebuild_required is False
+    assert event.indexed_images == 1
+    assert service.list_image_statuses("graduation")[0].face_count == 2
+    assert service.request_index("graduation") is False
+    assert updater.calls == []
 
 
 def test_one_event_failure_does_not_stop_the_queue(tmp_path):
