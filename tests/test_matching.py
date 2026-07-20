@@ -13,7 +13,7 @@ import pytest
 
 from src.matching import cosine_similarity, classify_tier
 from src.matching.matcher import match_selfie, NoFaceDetectedError, EventNotIndexedError
-from src.indexing import IndexedFace
+from src.indexing import EventIndex, IndexedFace
 from config import CONFIDENT_MATCH_THRESHOLD, POSSIBLE_MATCH_THRESHOLD
 
 
@@ -36,6 +36,14 @@ class TestCosineSimilarity:
         a = np.zeros(4)
         b = np.array([1.0, 2.0, 3.0, 4.0])
         assert cosine_similarity(a, b) == 0.0
+
+    def test_rejects_different_dimensions(self):
+        with pytest.raises(ValueError, match="same dimensions"):
+            cosine_similarity(np.ones(3), np.ones(4))
+
+    def test_rejects_non_finite_values(self):
+        with pytest.raises(ValueError, match="finite"):
+            cosine_similarity(np.array([1.0, np.nan]), np.ones(2))
 
 
 class TestClassifyTier:
@@ -73,6 +81,14 @@ class FakeIndex:
 
 
 class TestMatchSelfie:
+    def test_rejects_non_positive_top_k(self):
+        with pytest.raises(ValueError, match="top_k"):
+            match_selfie(
+                np.zeros((10, 10, 3), dtype=np.uint8),
+                event_id="test_event",
+                top_k=0,
+            )
+
     def test_raises_when_no_face_in_selfie(self, monkeypatch):
         monkeypatch.setattr("src.matching.matcher.detect_and_embed", lambda img: [])
         monkeypatch.setattr("src.matching.matcher.preprocess_image", lambda img: img)
@@ -140,3 +156,32 @@ class TestMatchSelfie:
         results = match_selfie(np.zeros((10, 10, 3), dtype=np.uint8), event_id="test_event")
         confident_paths = [m.photo_path for m in results["confident"]]
         assert confident_paths == ["a.jpg", "b.jpg", "c.jpg"]  # 0.95, 0.80, 0.70
+
+    def test_real_faiss_index_returns_confidence_tiers(self, monkeypatch):
+        """Exercise detection output -> real FAISS search -> tiered photo results."""
+        query = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        fake_face = FakeFace((0, 0, 10, 10), 0.99, query)
+        monkeypatch.setattr("src.matching.matcher.detect_and_embed", lambda img: [fake_face])
+        monkeypatch.setattr("src.matching.matcher.preprocess_image", lambda img: img)
+
+        index = EventIndex(dim=3)
+        index.add(
+            [
+                np.array([0.90, np.sqrt(0.19), 0.0], dtype=np.float32),
+                np.array([0.60, 0.80, 0.0], dtype=np.float32),
+                np.array([0.40, np.sqrt(0.84), 0.0], dtype=np.float32),
+            ],
+            [
+                IndexedFace("confident.jpg", (0, 0, 5, 5), 0.99),
+                IndexedFace("possible.jpg", (0, 0, 5, 5), 0.98),
+                IndexedFace("rejected.jpg", (0, 0, 5, 5), 0.97),
+            ],
+        )
+        monkeypatch.setattr("src.matching.matcher.load_event_index", lambda event_id: index)
+
+        results = match_selfie(
+            np.zeros((10, 10, 3), dtype=np.uint8), event_id="test_event"
+        )
+
+        assert [match.photo_path for match in results["confident"]] == ["confident.jpg"]
+        assert [match.photo_path for match in results["possible"]] == ["possible.jpg"]
