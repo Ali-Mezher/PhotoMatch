@@ -43,8 +43,8 @@
 ## Week 5 — Deployment Readiness & Final Report
 | Issue | Task | Ownership | Status | Notes |
 |-------|------|-----------|--------|-------|
-| #18 | Privacy: consent, secure biometric storage & retention/deletion policy | Nourallah Mourad | ✅ Done | `docs/PRIVACY_AND_RETENTION.md` defines affirmative and guardian consent, separate evaluation consent, local encrypted storage and least-privilege access, exact retention limits, verified deletion, and incident response. |
-| #19 | Report & presentation: final write-up | — | ⬜ Not started | Incorporate the completed evaluation, validation, privacy, and deployment-readiness results. |
+| #18 | Privacy: consent, secure biometric storage & retention/deletion policy | Nourallah Mourad & Malek Alkashat | ✅ Done | `docs/PRIVACY_AND_RETENTION.md` defines affirmative and guardian consent, separate evaluation consent, local encrypted storage and least-privilege access, exact retention limits, verified deletion, and incident response. |
+| #19 | Report & presentation: final write-up | Nourallah Mourad | ✅ Draft complete | `docs/FINAL_REPORT.md` and `docs/PRESENTATION_OUTLINE.md` integrate the implemented pipeline, verification, evaluation protocol, deployment, privacy, limitations, demo flow, and speaking notes. Real-event metric fields remain explicitly pending consented data. |
 
 ---
 

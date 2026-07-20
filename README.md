@@ -11,6 +11,8 @@ cloud upload, no per-event cost.
 
 CPEG 418 — Computer Vision — American University of Kuwait — Summer 2026.
 Full write-up: [`PhotoMatch_Proposal.pdf`](PhotoMatch_Proposal.pdf).
+Final deliverables: [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) and
+[`docs/PRESENTATION_OUTLINE.md`](docs/PRESENTATION_OUTLINE.md).
 
 ## Status
 
