@@ -14,9 +14,10 @@ Full write-up: [`PhotoMatch_Proposal.pdf`](PhotoMatch_Proposal.pdf).
 
 ## Status
 
-Week 3 of 4 — indexing, matching & interface in progress; preprocessing
-and detection (Week 2) are done. See [`ROADMAP.md`](ROADMAP.md) for the
-full task breakdown and owners.
+Week 4 of 4 — evaluation & validation tooling is built and tested;
+running it against real event photos to produce final numbers is the
+remaining work. Weeks 1–3 (proposal through interface) are done. See
+[`ROADMAP.md`](ROADMAP.md) for the full task breakdown and owners.
 
 ## Pipeline
 
@@ -36,6 +37,25 @@ Ingest → Preprocess → Detect & Embed → Index → Match → Deliver
 Shared constants (image size, thresholds, paths) live in [`config.py`](config.py)
 at the repo root — import from there rather than hardcoding values, so
 everyone's modules stay compatible.
+
+## Evaluation (Week 4)
+
+`src/evaluation/` measures the system against real data: precision/recall@k,
+query time, FAR/FRR thresholds, FAISS scalability up to 100,000 faces, an
+offline-operation check, and manual-vs-automatic time savings — all tied
+together into one report.
+
+**To evaluate a real (or realistic stand-in) event, you only need to drop
+photos into a folder — no code changes.** See
+[`data/evaluation/README.md`](data/evaluation/README.md) for the exact
+layout, then run:
+
+```bash
+python scripts/run_evaluation.py <event_id>            # core metrics
+python scripts/run_evaluation.py <event_id> --scalability  # + FAISS scaling suite
+```
+
+This saves a full markdown report to `data/evaluation/<event_id>/report.md`.
 
 ## Setup
 
@@ -63,8 +83,8 @@ pip install pytest
 pytest tests/ -v
 ```
 
-36 tests across preprocessing, detection, indexing, and matching — all
-run on synthetic data and need no model downloads or sample photos.
+130 tests across preprocessing, detection, indexing, matching, threshold tuning, and
+evaluation — all run on synthetic data and need no model downloads or sample photos.
 Full detection/embedding inference needs `mtcnn` and `deepface`
 installed (already in `requirements.txt`) — see the integration-check
 snippet at the bottom of `tests/test_detection.py`.
@@ -84,9 +104,25 @@ python scripts/demo_index_and_search.py index my_event
 # Search that event with a selfie, from the command line:
 python scripts/demo_index_and_search.py search my_event path/to/selfie.jpg
 
+# Tune thresholds from labeled genuine/impostor similarity scores:
+python scripts/tune_thresholds.py path/to/scores.csv
+
 # Or launch the full kiosk app:
 python -m src.interface.app
 ```
+
+The threshold-tuning CSV needs `score` and `label` columns. Use
+`genuine` when both faces belong to the same person and `impostor` when
+they belong to different people:
+
+```csv
+score,label
+0.86,genuine
+0.42,impostor
+```
+
+The tool reports FAR and FRR and recommends values for `config.py`; it
+does not change production thresholds automatically.
 
 ## Data & privacy
 

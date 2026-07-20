@@ -1,73 +1,47 @@
-"""
-Issue #3 — Intensity transformation (brightness & contrast).
-
-Adjusts exposure so faces are detectable in both bright outdoor shots
-and dim indoor venue shots, which is where MTCNN misses the most faces.
-"""
-
 import cv2
 import numpy as np
 
 
 def adjust_brightness_contrast(
-    image: np.ndarray, alpha: float = 1.0, beta: float = 0.0
+    image: np.ndarray, alpha: float = 1.0, beta: float = 0
 ) -> np.ndarray:
-    """
-    Linear intensity transform: output = alpha * input + beta.
+    """Scale contrast by alpha and shift brightness by beta.
 
-    Args:
-        image: BGR or grayscale image, uint8.
-        alpha: contrast gain. 1.0 = unchanged, >1.0 = more contrast.
-        beta: brightness offset, added after scaling. Positive = brighter.
-
-    Returns:
-        Adjusted image, same shape/dtype, values clipped to [0, 255].
+    alpha > 1 increases contrast, alpha < 1 reduces it.
+    beta > 0 brightens, beta < 0 darkens.
     """
     return cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
 
 
-def auto_contrast_clahe(image: np.ndarray, clip_limit: float = 2.0) -> np.ndarray:
-    """
-    Adaptive contrast correction using CLAHE (Contrast Limited Adaptive
-    Histogram Equalization), applied on the luminance channel only so
-    colors don't shift. This is the main function to reach for on dim
-    indoor event photos — it's local, so it doesn't blow out already-
-    bright areas of the same image the way global equalization would.
+def apply_clahe(image: np.ndarray, clip_limit: float = 2.0, tile_size: int = 8) -> np.ndarray:
+    """Contrast Limited Adaptive Histogram Equalization (CLAHE).
 
-    Args:
-        image: BGR image, uint8.
-        clip_limit: contrast limiting threshold. Higher = more aggressive.
-
-    Returns:
-        BGR image with adaptive contrast applied.
+    Enhances local contrast without over-amplifying noise — better than
+    global histogram equalization for mixed indoor/outdoor event photos.
+    Applied to the L channel in LAB color space to avoid hue shifts.
     """
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-    l_channel, a_channel, b_channel = cv2.split(lab)
-
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8, 8))
-    l_equalized = clahe.apply(l_channel)
-
-    merged = cv2.merge([l_equalized, a_channel, b_channel])
-    return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(tile_size, tile_size))
+    l = clahe.apply(l)
+    lab = cv2.merge([l, a, b])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
 
-def estimate_exposure(image: np.ndarray) -> str:
-    """
-    Rough classification of an image as under/over/well exposed, based on
-    mean luminance. Useful for deciding whether to run auto_contrast_clahe
-    before detection, or logging why a photo was hard to detect faces in.
-
-    Args:
-        image: BGR image, uint8.
-
-    Returns:
-        One of "underexposed", "overexposed", "normal".
-    """
+def is_low_light(image: np.ndarray, threshold: int = 80) -> bool:
+    """Return True if the image mean brightness is below the threshold."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    mean_intensity = gray.mean()
+    return float(np.mean(gray)) < threshold
 
-    if mean_intensity < 80:
-        return "underexposed"
-    if mean_intensity > 180:
-        return "overexposed"
-    return "normal"
+
+def preprocess(image: np.ndarray, clip_limit: float = 2.0, tile_size: int = 8) -> np.ndarray:
+    """Intensity transformation pipeline.
+
+    Applies CLAHE for local contrast enhancement. For dim images (mean
+    brightness < 80), also applies a brightness boost to ensure faces
+    are detectable in low-light indoor event shots.
+    """
+    if is_low_light(image):
+        image = adjust_brightness_contrast(image, alpha=1.2, beta=30)
+    image = apply_clahe(image, clip_limit=clip_limit, tile_size=tile_size)
+    return image

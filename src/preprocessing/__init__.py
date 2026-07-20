@@ -6,8 +6,8 @@ calls before running face detection.
 
 import numpy as np
 
-from .color_geometry import correct_white_balance, correct_orientation
-from .intensity import auto_contrast_clahe, estimate_exposure
+from .color_geometry import normalize_white_balance, correct_geometry
+from .intensity import apply_clahe, is_low_light
 from .filtering import denoise, sharpen
 from .morphology_segmentation import crop_face_region, clean_mask, segment_foreground
 
@@ -23,6 +23,28 @@ __all__ = [
     "segment_foreground",
     "preprocess_image",
 ]
+
+
+def correct_white_balance(image: np.ndarray) -> np.ndarray:
+    """Validate and apply the project's gray-world white balancing."""
+    if image is None or image.size == 0:
+        raise ValueError("correct_white_balance: received an empty image")
+    return normalize_white_balance(image)
+
+
+def correct_orientation(image: np.ndarray) -> np.ndarray:
+    """Apply the existing geometry correction used by the preprocessing stage."""
+    return correct_geometry(image)
+
+
+def auto_contrast_clahe(image: np.ndarray) -> np.ndarray:
+    """Compatibility entry point for CLAHE contrast enhancement."""
+    return apply_clahe(image)
+
+
+def estimate_exposure(image: np.ndarray) -> str:
+    """Classify exposure for the integrated pipeline's CLAHE decision."""
+    return "underexposed" if is_low_light(image) else "normal"
 
 
 def preprocess_image(image: np.ndarray) -> np.ndarray:
@@ -48,7 +70,7 @@ def preprocess_image(image: np.ndarray) -> np.ndarray:
     if estimate_exposure(result) != "normal":
         result = auto_contrast_clahe(result)
 
-    result = denoise(result, strength=8)
-    result = sharpen(result, amount=0.6)
+    result = denoise(result)
+    result = sharpen(result)
 
     return result
