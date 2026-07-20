@@ -51,7 +51,7 @@
 ## Post-Core — Stretch Goals
 | Issue | Task | Ownership | Status | Notes |
 |-------|------|-----------|--------|-------|
-| #20 | Interface: auto-clustering of similar faces *(stretch goal)* | — | ⬜ Not started | Cluster detected faces into candidate identities for staff review. |
+| #20 | Interface: auto-clustering of similar faces *(stretch goal)* | Malek AlKashat | 🟨 Implemented — pending review/merge | Builds conservative, event-scoped candidate identity clusters from mutual FAISS neighbors; uncertain faces remain unclustered. Saves a local `clusters.json` artifact and provides `scripts/cluster_event.py` for staff review preparation. |
 | #21 | Security: liveness / anti-spoofing *(stretch goal)* | — | ⬜ Not started | Add and evaluate a basic blink, motion, or texture-based check to reduce searches using another person's photograph. |
 | #22 | Interface: watermarked previews & admin dashboard *(stretch goal)* | — | ⬜ Not started | Show protected previews and give staff indexing status, failed-job retry, and manual review controls. |
 

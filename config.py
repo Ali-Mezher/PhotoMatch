@@ -55,6 +55,16 @@ POSSIBLE_MATCH_THRESHOLD = 0.50
 EVENT_RAW_SUBDIR = "raw"
 EVENT_INDEXED_SUBDIR = "indexed"
 
+# ---------------------------------------------------------------------------
+# Auto-clustering (Issue #20)
+# ---------------------------------------------------------------------------
+# Clustering is intentionally conservative: uncertain faces are left
+# unclustered for staff review instead of being forced into a wrong identity.
+CLUSTER_NEIGHBORS = 50
+CLUSTER_EDGE_SIMILARITY = 0.75
+CLUSTER_COHESION_SIMILARITY = 0.70
+CLUSTER_MIN_SIZE = 2
+
 
 def event_dir(event_id: str) -> Path:
     """Return the data directory for a given event_id, creating it if needed."""
