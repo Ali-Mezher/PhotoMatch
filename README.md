@@ -131,6 +131,12 @@ files under it are gitignored, along with generated embeddings/indexes
 and model weights. See [`.gitignore`](.gitignore). Photos contain
 biometric data of real people, including minors — handle accordingly.
 
+Before collecting or loading any real data, follow the project's
+[privacy, consent, access-control, and deletion policy](docs/PRIVACY_AND_RETENTION.md).
+It defines the required notice and consent records, separate guardian and
+evaluation consent, local-storage protections, retention deadlines, and the
+verified event-deletion procedure.
+
 ## Team
 
 | Name | ID | Role |

@@ -3,6 +3,12 @@
 This folder is empty on purpose. To evaluate PhotoMatch against real
 data, add photos here — no code, no CSV, no config editing needed.
 
+Evaluation data links a person's identity to biometric photos. Obtain separate,
+explicit evaluation consent (and verified guardian consent for minors) before
+adding it. Follow the full [privacy and retention policy](../../docs/PRIVACY_AND_RETENTION.md),
+and delete each identity set immediately after its results are accepted and no
+later than 30 days after the evaluation run.
+
 ## Folder layout to create
 
 For an event you've already indexed (e.g. `grad2026`, matching
