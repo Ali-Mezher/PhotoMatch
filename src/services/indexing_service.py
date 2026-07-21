@@ -169,6 +169,14 @@ class IndexingService:
     def list_events(self) -> list[EventSummary]:
         return self.store.list_events()
 
+    def search_events(
+        self, query: str = "", limit: int = 25, offset: int = 0
+    ) -> tuple[list[EventSummary], int]:
+        return self.store.search_events(query=query, limit=limit, offset=offset)
+
+    def event_catalog_totals(self) -> dict[str, int]:
+        return self.store.event_catalog_totals()
+
     def get_event(self, event_id: str) -> EventSummary:
         event_id = validate_event_id(event_id)
         event = self.store.get_event(event_id)

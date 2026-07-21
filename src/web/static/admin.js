@@ -10,6 +10,42 @@
     window.setTimeout(() => window.location.reload(), 2500);
   }
 
+  const selectionForm = document.querySelector("[data-selection-form]");
+  if (selectionForm) {
+    const checkboxes = [...selectionForm.querySelectorAll('input[name="photo_ids"]')];
+    const count = selectionForm.querySelector("[data-selection-count]");
+    const exportButton = selectionForm.querySelector("[data-export-button]");
+    const updateSelection = () => {
+      const selected = checkboxes.filter((checkbox) => checkbox.checked).length;
+      count.textContent = `${selected} photo${selected === 1 ? "" : "s"} selected`;
+      exportButton.disabled = selected === 0;
+    };
+    checkboxes.forEach((checkbox) => checkbox.addEventListener("change", updateSelection));
+    updateSelection();
+  }
+
+  const previewDialog = document.querySelector("[data-preview-dialog]");
+  const previewImage = document.querySelector("[data-preview-image]");
+  const previewTitle = document.querySelector("[data-preview-title]");
+  if (previewDialog && previewImage && previewTitle) {
+    document.querySelectorAll("[data-preview-url]").forEach((button) => {
+      button.addEventListener("click", () => {
+        previewImage.src = button.dataset.previewUrl;
+        previewImage.alt = `${button.dataset.previewName} protected preview`;
+        previewTitle.textContent = button.dataset.previewName;
+        previewDialog.showModal();
+      });
+    });
+    document.querySelector("[data-preview-close]")?.addEventListener("click", () => previewDialog.close());
+    previewDialog.addEventListener("click", (event) => {
+      if (event.target === previewDialog) previewDialog.close();
+    });
+    previewDialog.addEventListener("close", () => {
+      previewImage.removeAttribute("src");
+      previewImage.alt = "";
+    });
+  }
+
   const form = document.querySelector("[data-batch-upload]");
   if (!form || !window.fetch || !window.FormData) return;
   const input = form.querySelector("input[type=file]");

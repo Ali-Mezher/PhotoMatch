@@ -474,11 +474,17 @@ input[type="checkbox"] {
   gap: 12px;
   color: var(--ink);
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
   text-align: left;
   cursor: pointer;
   transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.upload-zone.is-selected,
+.camera-action.is-selected {
+  border-style: solid;
+  background: var(--surface);
 }
 
 .camera-action:hover,

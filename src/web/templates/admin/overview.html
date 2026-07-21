@@ -13,6 +13,20 @@
 </section>
 <section class="section-block">
   <div class="section-heading"><div><h2>Event inventory</h2><p>Oldest events appear first.</p></div></div>
+  <form class="inventory-toolbar" method="get" action="{{ url_for('admin.overview') }}" role="search">
+    <label class="inventory-search">
+      <span class="sr-only">Search events</span>
+      <input type="search" name="q" value="{{ query }}" placeholder="Search name, code, or date…" maxlength="100" autocomplete="off">
+    </label>
+    <label class="page-size-control">
+      <span>Rows per page</span>
+      <select name="per_page">
+        {% for size in page_sizes %}<option value="{{ size }}" {% if size == per_page %}selected{% endif %}>{{ size }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="button" type="submit">Search</button>
+    {% if query or per_page != 25 %}<a class="button button-quiet" href="{{ url_for('admin.overview') }}">Clear</a>{% endif %}
+  </form>
   {% if events %}
   <div class="table-wrap">
     <table>
@@ -33,6 +47,15 @@
       </tbody>
     </table>
   </div>
+  <nav class="pagination" aria-label="Event inventory pages">
+    <div><strong>Page {{ page }} of {{ page_count }}</strong><span>{{ matching_events }} matching event{% if matching_events != 1 %}s{% endif %}</span></div>
+    <div>
+      {% if page > 1 %}<a class="button" href="{{ url_for('admin.overview', q=query or None, per_page=per_page, page=page-1) }}">Previous</a>{% endif %}
+      {% if page < page_count %}<a class="button" href="{{ url_for('admin.overview', q=query or None, per_page=per_page, page=page+1) }}">Next</a>{% endif %}
+    </div>
+  </nav>
+  {% elif totals.events %}
+  <div class="empty-state"><h3>No matching events</h3><p>Check the event name, access code, or date and try again.</p><a class="button" href="{{ url_for('admin.overview') }}">Clear search</a></div>
   {% else %}<div class="empty-state"><h3>No events yet</h3><p>Create an event, then import its event photos.</p><a class="button" href="{{ url_for('admin.new_event') }}">Create first event</a></div>{% endif %}
 </section>
 <section class="section-block audit-block">

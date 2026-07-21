@@ -21,6 +21,7 @@ class StoredPhoto:
 class StoredSearch:
     token: str
     event_id: str
+    audience: str
     photos: dict[str, StoredPhoto]
     created_at: float
     expires_at: float
@@ -45,7 +46,11 @@ class SearchResultStore:
         self._lock = Lock()
         self._searches: dict[str, StoredSearch] = {}
 
-    def create(self, event_id: str, matches: dict) -> StoredSearch:
+    def create(
+        self, event_id: str, matches: dict, audience: str = "public"
+    ) -> StoredSearch:
+        if audience not in {"public", "admin"}:
+            raise ValueError("audience must be 'public' or 'admin'")
         now = self._clock()
         token = secrets.token_urlsafe(24)
         photos: dict[str, StoredPhoto] = {}
@@ -68,6 +73,7 @@ class SearchResultStore:
         search = StoredSearch(
             token=token,
             event_id=event_id,
+            audience=audience,
             photos=photos,
             created_at=now,
             expires_at=now + self.ttl_seconds,

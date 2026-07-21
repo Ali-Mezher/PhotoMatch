@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/selfie_picker.html" import selfie_picker %}
 {% block title %}Find Your Event Photos · PhotoMatch{% endblock %}
 
 {% block content %}
@@ -64,28 +65,7 @@
 
     <div class="field-group">
       <span class="field-label">Selfie image</span>
-      <div class="selfie-inputs">
-        <label class="upload-zone" for="selfie">
-          <span class="upload-symbol" aria-hidden="true">↑</span>
-          <span class="upload-copy">
-            <strong>Choose a clear selfie</strong>
-            <small data-file-name>JPG, PNG, WebP, or BMP · Maximum 12 MB</small>
-          </span>
-          <input
-            id="selfie"
-            name="selfie"
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/bmp"
-            capture="user"
-            required
-          >
-        </label>
-        <button class="camera-action" type="button" data-camera-open>
-          <span class="camera-action-mark" aria-hidden="true"></span>
-          <span><strong>Use Camera</strong><small>Take a selfie on this device</small></span>
-        </button>
-      </div>
-      <p class="field-help" data-camera-support aria-live="polite"></p>
+      {{ selfie_picker() }}
     </div>
 
     <button class="button button-primary button-wide" type="submit">
@@ -139,23 +119,4 @@
   {% endif %}
 </section>
 
-{% if unlocked_event %}
-<dialog class="camera-dialog" data-camera-dialog aria-labelledby="camera-title">
-  <div class="dialog-header">
-    <h2 id="camera-title">Take a Selfie</h2>
-    <button type="button" class="dialog-close" data-camera-close aria-label="Close camera">×</button>
-  </div>
-  <div class="camera-media">
-    <video data-camera-video autoplay muted playsinline></video>
-    <canvas data-camera-canvas hidden></canvas>
-  </div>
-  <div class="camera-controls">
-    <p data-camera-status role="status" aria-live="polite">Camera permission is required.</p>
-    <div>
-      <button class="button button-secondary" type="button" data-camera-cancel>Cancel</button>
-      <button class="button button-primary" type="button" data-camera-capture disabled>Take Photo</button>
-    </div>
-  </div>
-</dialog>
-{% endif %}
 {% endblock %}
