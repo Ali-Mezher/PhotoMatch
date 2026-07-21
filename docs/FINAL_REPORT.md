@@ -2,9 +2,9 @@
 
 ## Final Technical Report
 
-**Course:** CPEG 418 — Computer Vision  
-**Institution:** American University of Kuwait  
-**Client:** Golden Camera  
+**Course:** CPEG 418 — Computer Vision
+**Institution:** American University of Kuwait
+**Client:** Golden Camera
 **Term:** Summer 2026
 
 ### Team

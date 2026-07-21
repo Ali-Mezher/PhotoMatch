@@ -25,6 +25,9 @@ class AdminWorkCoordinator:
     def start(self) -> None:
         self._manager.start()
         indexing_waiting = bool(self.indexing.store.recover_interrupted_events())
+        indexing_waiting = bool(
+            self.indexing.reconcile_registered_events()
+        ) or indexing_waiting
         clustering_waiting = self.admin_store.recover_interrupted_clusters()
         if indexing_waiting or clustering_waiting:
             self.signal()

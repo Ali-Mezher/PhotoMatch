@@ -67,4 +67,3 @@ SQLite and are not controlled by environment variables.
 Event folders, model names, and pipeline constants continue to come from
 `config.py`. They are application-level constants rather than deployment
 environment settings.
-

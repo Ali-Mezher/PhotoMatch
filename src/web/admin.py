@@ -114,7 +114,7 @@ def login_submit():
     session["csrf_token"] = secrets.token_urlsafe(32)
     session.permanent = True
     _admin_store().record_audit("login_succeeded")
-    return redirect(_safe_next(request.form.get("next")) or url_for("admin.overview"), code=303)
+    return redirect(url_for("admin.overview"), code=303)
 
 
 @admin.post("/logout")
@@ -403,12 +403,6 @@ def reset_settings():
     _admin_store().record_audit("settings_reset")
     flash("Runtime settings restored to project defaults.", "success")
     return redirect(url_for("admin.settings"), code=303)
-
-
-def _safe_next(value: str | None) -> str | None:
-    if value and value.startswith("/admin") and not value.startswith("//"):
-        return value
-    return None
 
 
 def _indexing():

@@ -48,3 +48,11 @@ class ImageIndexOutcome:
     status: IndexStatus
     face_count: int = 0
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    """Interface-neutral wrapper around the two public match tiers."""
+
+    confident: list
+    possible: list

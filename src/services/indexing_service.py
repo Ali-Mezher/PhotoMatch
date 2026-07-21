@@ -40,9 +40,11 @@ class IndexingService:
         self._manager = IndexingManager(lambda: self._drain_queue(False))
 
     def start(self) -> None:
-        """Start the worker and resume jobs interrupted by a prior shutdown."""
+        """Start the worker, recover jobs, and reconcile registered events once."""
         self._manager.start()
-        if self.store.recover_interrupted_events():
+        recovered = bool(self.store.recover_interrupted_events())
+        reconciled = bool(self.reconcile_registered_events())
+        if recovered or reconciled:
             self._manager.signal()
 
     def shutdown(self, wait: bool = True) -> None:
@@ -96,6 +98,27 @@ class IndexingService:
         if count:
             self.request_index(event_id)
         return count
+
+    def reconcile_registered_events(self) -> list[str]:
+        """Queue changed registered events during startup without polling.
+
+        SQL remains the event authority. This one-time pass detects photos that
+        were manually copied into an already registered event while the app was
+        stopped, while leaving a newly created empty event alone.
+        """
+        queued: list[str] = []
+        for summary in self.list_events():
+            if not self.reconcile_event(summary.event_id):
+                continue
+            event = self.get_event(summary.event_id)
+            has_meaningful_work = (
+                event.total_images > 0
+                or event.rebuild_required
+                or self._event_index_exists(summary.event_id)
+            )
+            if has_meaningful_work and self.store.queue_event(summary.event_id):
+                queued.append(summary.event_id)
+        return queued
 
     def reconcile_event(self, event_id: str) -> bool:
         """Refresh one event's SQL inventory without scheduling by itself."""

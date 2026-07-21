@@ -141,6 +141,19 @@ class EventIndex:
         with open(directory / METADATA_FILENAME, "w") as f:
             json.dump([asdict(m) for m in self.metadata], f)
 
+    def embeddings(self) -> np.ndarray:
+        """Return stored normalized embeddings in the same order as metadata.
+
+        This is used by per-event clustering. The index remains the source of
+        truth; vectors are reconstructed only when an operation needs the full
+        event graph rather than a single nearest-neighbor query.
+        """
+        if not self.metadata:
+            return np.empty((0, self.dim), dtype=np.float32)
+        return np.ascontiguousarray(
+            self.index.reconstruct_n(0, len(self.metadata)), dtype=np.float32
+        )
+
     @classmethod
     def load(cls, directory: Path) -> "EventIndex":
         """

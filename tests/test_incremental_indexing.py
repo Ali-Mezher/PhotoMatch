@@ -167,6 +167,25 @@ def test_new_photo_is_appended_without_reprocessing_existing_photo(tmp_path):
     assert service.get_event("graduation").indexed_images == 2
 
 
+def test_startup_reconciliation_detects_manual_addition_without_reindexing_old_photo(
+    tmp_path,
+):
+    service, updater, events_dir = _service(tmp_path)
+    first = _add_photo(events_dir, "graduation", "first.jpg")
+    service.register_event("graduation", "2026-07-01")
+    service.request_index("graduation")
+    service._drain_queue()
+
+    second = _add_photo(events_dir, "graduation", "second.jpg")
+    assert service.reconcile_registered_events() == ["graduation"]
+    service._drain_queue()
+
+    assert updater.calls == [
+        ("graduation", [first], True),
+        ("graduation", [second], False),
+    ]
+
+
 def test_changed_or_removed_photo_rebuilds_current_inventory(tmp_path):
     service, updater, events_dir = _service(tmp_path)
     first = _add_photo(events_dir, "graduation", "first.jpg", b"first")
