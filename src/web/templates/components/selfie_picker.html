@@ -1,0 +1,57 @@
+{% macro selfie_picker(disabled=false) %}
+<div class="selfie-picker" data-selfie-picker>
+  <div class="selfie-inputs">
+    <label class="upload-zone" for="selfie" data-selfie-upload>
+      <span class="upload-symbol" aria-hidden="true">↑</span>
+      <span class="upload-copy">
+        <strong>Choose a Clear Selfie</strong>
+        <small data-file-name data-default-copy="JPG, PNG, WebP, or BMP · Maximum 12 MB">JPG, PNG, WebP, or BMP · Maximum 12 MB</small>
+      </span>
+      <input
+        id="selfie"
+        name="selfie"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/bmp"
+        capture="user"
+        required
+        {% if disabled %}disabled{% endif %}
+      >
+    </label>
+    <button class="camera-action" type="button" data-camera-open aria-pressed="false" {% if disabled %}disabled{% endif %}>
+      <span class="camera-action-mark" aria-hidden="true"></span>
+      <span><strong>Use Camera</strong><small data-camera-copy data-default-copy="Take a selfie on this device">Take a selfie on this device</small></span>
+    </button>
+  </div>
+  <p class="field-help" data-camera-support aria-live="polite"></p>
+
+  <dialog class="camera-dialog" data-camera-dialog aria-labelledby="camera-title">
+    <div class="dialog-header">
+      <h2 id="camera-title">Take a Selfie</h2>
+      <button type="button" class="dialog-close" data-camera-close aria-label="Close camera">×</button>
+    </div>
+    <div class="camera-media">
+      <video data-camera-video autoplay muted playsinline></video>
+      <canvas data-camera-canvas hidden></canvas>
+    </div>
+    <div class="camera-controls">
+      <p data-camera-status role="status" aria-live="polite">Camera permission is required.</p>
+      <div>
+        <button class="button button-secondary" type="button" data-camera-cancel>Cancel</button>
+        <button class="button button-primary" type="button" data-camera-capture disabled>Take Photo</button>
+      </div>
+    </div>
+  </dialog>
+</div>
+{% endmacro %}
+
+{% macro search_submit(label, wide=false, disabled=false) %}
+<div class="search-submit{% if wide %} search-submit-wide{% endif %}">
+  <button class="button button-primary{% if wide %} button-wide{% endif %}" type="submit" data-search-submit data-search-disabled="{{ 'true' if disabled else 'false' }}" {% if disabled %}disabled{% endif %}>
+    <span data-search-submit-label>{{ label }}</span>
+  </button>
+  <div class="search-pending" data-search-pending role="status" aria-live="polite" hidden>
+    <span class="search-spinner" aria-hidden="true"></span>
+    <span><strong>Hang tight — searching photos</strong><small>This can take a moment for larger events.</small></span>
+  </div>
+</div>
+{% endmacro %}

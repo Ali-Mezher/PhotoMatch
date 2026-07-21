@@ -119,9 +119,12 @@ python -m src.web
 ```
 
 The dashboard creates events, imports JPG/PNG photos, queues incremental indexing,
-shows attendee codes, controls a validated subset of search settings, and runs
-review-only identity clustering. The worker is interrupt-driven and serializes
-indexing and clustering; it never scans on a timer. Set
+shows live per-event indexing progress and attendee codes, controls a validated subset of search settings, and runs
+review-only identity clustering. Each event page can also run an in-memory person
+search without re-entering the attendee code. The event inventory supports filtering
+by name, internal ID, attendee code, or date, with configurable page sizes for larger
+catalogs. The worker is interrupt-driven and serializes indexing and clustering; it
+never scans on a timer. Set
 `PHOTOMATCH_BACKGROUND_WORKER=0` only when a separate process owns background work.
 Debug mode is off by default and can be explicitly enabled for local development with
 `PHOTOMATCH_DEBUG=1`.

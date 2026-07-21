@@ -46,6 +46,14 @@ from .access import EventAccessGate
 from .admin import admin
 from .media import InvalidImageError, decode_selfie, render_watermarked_preview
 from .result_store import SearchResultStore, StoredPhoto, StoredSearch
+from .search_results import (
+    event_raw_dir,
+    filter_matches,
+    is_allowed_path,
+    require_photo,
+    require_search,
+    result_store,
+)
 
 
 @dataclass(frozen=True)
@@ -308,7 +316,7 @@ def register_routes(app: Flask) -> None:
             )
 
         safe_matches = _filter_matches(event_id, raw_matches)
-        stored = _result_store().create(event_id, safe_matches)
+        stored = _result_store().create(event_id, safe_matches, audience="public")
         return redirect(url_for("results", token=stored.token), code=303)
 
     @app.get("/results/<token>")
@@ -504,57 +512,27 @@ def _index_ready(index_dir: Path) -> bool:
 
 
 def _filter_matches(event_id: str, matches: dict) -> dict:
-    raw_dir = _event_raw_dir(event_id)
-    filtered = {"confident": [], "possible": []}
-    for tier in filtered:
-        for match in matches.get(tier, []):
-            path = Path(match.photo_path).resolve()
-            if _is_allowed_path(path, raw_dir) and path.is_file():
-                filtered[tier].append(match)
-            else:
-                current_app.logger.warning(
-                    "Ignored match outside event directory for event %s", event_id
-                )
-    return filtered
+    return filter_matches(event_id, matches)
 
 
 def _require_search(token: str) -> StoredSearch:
-    stored = _result_store().get(token)
-    if stored is None:
-        abort(410, description="This search has expired. Start a new search.")
-    return stored
+    return require_search(token, "public")
 
 
 def _require_photo(token: str, photo_id: str) -> tuple[StoredSearch, StoredPhoto]:
-    stored = _require_search(token)
-    photo = stored.photos.get(photo_id)
-    if photo is None:
-        abort(404)
-    if not _is_allowed_path(photo.path, _event_raw_dir(stored.event_id)):
-        abort(404)
-    if not photo.path.is_file():
-        abort(404)
-    return stored, photo
+    return require_photo(token, photo_id, "public")
 
 
 def _event_raw_dir(event_id: str) -> Path:
-    events_dir = Path(current_app.config["EVENTS_DIR"]).resolve()
-    raw_dir = (events_dir / event_id / EVENT_RAW_SUBDIR).resolve()
-    if raw_dir.parent.parent != events_dir:
-        abort(404)
-    return raw_dir
+    return event_raw_dir(event_id)
 
 
 def _is_allowed_path(path: Path, raw_dir: Path) -> bool:
-    try:
-        path.relative_to(raw_dir)
-    except ValueError:
-        return False
-    return True
+    return is_allowed_path(path, raw_dir)
 
 
 def _result_store() -> SearchResultStore:
-    return current_app.config["RESULT_STORE"]
+    return result_store()
 
 
 def _event_access_gate() -> EventAccessGate:

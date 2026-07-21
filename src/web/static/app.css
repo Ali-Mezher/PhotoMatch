@@ -474,11 +474,17 @@ input[type="checkbox"] {
   gap: 12px;
   color: var(--ink);
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
   text-align: left;
   cursor: pointer;
   transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.upload-zone.is-selected,
+.camera-action.is-selected {
+  border-style: solid;
+  background: var(--surface);
 }
 
 .camera-action:hover,
@@ -622,6 +628,57 @@ input[type="checkbox"] {
 .button-wide {
   width: 100%;
   margin-top: 26px;
+}
+
+.search-submit {
+  margin-top: 20px;
+  display: grid;
+  gap: 13px;
+}
+
+.search-pending {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+.search-pending[hidden] {
+  display: none;
+}
+
+.search-pending strong,
+.search-pending small {
+  display: block;
+}
+
+.search-pending strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+}
+
+.search-pending small {
+  margin-top: 2px;
+}
+
+.search-spinner {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 auto;
+  border: 2px solid var(--border);
+  border-top-color: var(--action);
+  border-radius: 50%;
+  animation: search-spin 0.75s linear infinite;
+}
+
+.is-searching .selfie-picker {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+@keyframes search-spin {
+  to { transform: rotate(360deg); }
 }
 
 .alert {
@@ -1111,5 +1168,12 @@ input[type="checkbox"] {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-spinner {
+    animation: none;
+    border-color: var(--action);
   }
 }

@@ -363,6 +363,43 @@ def test_image_added_during_active_job_is_not_lost(tmp_path):
     assert calls == [([first], True), ([second], False)]
 
 
+def test_index_progress_is_persisted_after_each_processed_photo(tmp_path):
+    events_dir = tmp_path / "events"
+    first = _add_photo(events_dir, "graduation", "first.jpg")
+    second = _add_photo(events_dir, "graduation", "second.jpg")
+    indexed = set()
+    observed = []
+    service = None
+
+    def progress_updater(
+        event_id, paths, rebuild, show_progress, progress_callback=None
+    ):
+        outcomes = []
+        for path in paths:
+            outcome = IndexBuildOutcome(Path(path), "indexed", face_count=1)
+            outcomes.append(outcome)
+            progress_callback(path, "indexed", 1, None)
+            observed.append(service.get_index_progress(event_id).percent)
+        indexed.add(event_id)
+        return object(), outcomes
+
+    service = IndexingService(
+        events_dir=events_dir,
+        database_path=tmp_path / "status.sqlite3",
+        index_updater=progress_updater,
+        index_exists=lambda event_id: event_id in indexed,
+    )
+    service.register_event("graduation", "2026-07-01")
+    service.request_index("graduation")
+    service.run_pending()
+
+    assert observed == [50, 100]
+    progress = service.get_index_progress("graduation")
+    assert progress.status is IndexStatus.INDEXED
+    assert progress.completed == progress.total == 2
+    assert progress.percent == 100
+
+
 def test_index_generations_append_and_load_atomically(tmp_path, monkeypatch):
     event_root = tmp_path / "events" / "graduation"
     first = _add_photo(tmp_path / "events", "graduation", "first.jpg")

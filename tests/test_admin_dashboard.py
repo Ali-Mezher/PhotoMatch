@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 import sqlite3
+from types import SimpleNamespace
+from zipfile import ZipFile
 
 from PIL import Image
 from src.services.admin_store import AdminStore, RuntimeSettings
+from src.services.models import ImageIndexOutcome, IndexStatus
 from src.services.status_store import StatusStore
 from src.web import create_app
 
 
-def _app(tmp_path):
-    return create_app(
-        {
+def _app(tmp_path, **overrides):
+    config = {
             "TESTING": True,
             "SECRET_KEY": "test-secret",
             "EVENTS_DIR": tmp_path / "events",
@@ -22,7 +25,8 @@ def _app(tmp_path):
             "ADMIN_PASSWORD": "correct horse",
             "ADMIN_START_WORKER": False,
         }
-    )
+    config.update(overrides)
+    return create_app(config)
 
 
 def _csrf(client):
@@ -47,6 +51,17 @@ def _png(name="photo.png"):
     Image.new("RGB", (24, 20), "#28708a").save(stream, "PNG")
     stream.seek(0)
     return stream, name
+
+
+def _indexed_event(app, event_id="ready-event", display_name="Ready Event"):
+    raw_dir = app.extensions["indexing_service"].events_dir / event_id / "raw"
+    raw_dir.mkdir(parents=True)
+    match = raw_dir / "match.png"
+    match.write_bytes(_png()[0].getvalue())
+    store = app.extensions["indexing_service"].store
+    store.register_event(event_id, "2026-07-21", display_name)
+    store.complete_event(event_id, "test-pipeline")
+    return match
 
 
 def test_admin_requires_login_and_accepts_configured_credentials(tmp_path):
@@ -251,3 +266,194 @@ def test_issue_23_service_schema_migrates_and_accepts_new_events(tmp_path):
     assert legacy.indexed_images == 1
     assert store.list_images("legacy-event")[0].face_count == 2
     assert store.get_event("new-event").display_name == "New Event"
+
+
+def test_event_inventory_searches_and_paginates_in_sql(tmp_path):
+    app = _app(tmp_path)
+    store = app.extensions["indexing_service"].store
+    for index in range(30):
+        store.register_event(
+            f"event-{index:02d}",
+            f"2026-07-{(index % 28) + 1:02d}",
+            "Summer Gala" if index == 7 else f"Event {index:02d}",
+        )
+
+    code = store.get_event_access_code("event-07")
+    formatted_code = f"{code[:4]}-{code[4:]}"
+    by_name, name_count = store.search_events("summer gala", 25, 0)
+    by_code, code_count = store.search_events(formatted_code, 25, 0)
+    by_date, date_count = store.search_events("2026-07-08", 25, 0)
+    first_page, total = store.search_events(limit=10, offset=0)
+    second_page, _ = store.search_events(limit=10, offset=10)
+
+    assert [event.event_id for event in by_name] == ["event-07"]
+    assert name_count == code_count == 1
+    assert [event.event_id for event in by_code] == ["event-07"]
+    assert any(event.event_id == "event-07" for event in by_date)
+    assert date_count >= 1
+    assert total == 30
+    assert len(first_page) == len(second_page) == 10
+    assert {event.event_id for event in first_page}.isdisjoint(
+        event.event_id for event in second_page
+    )
+
+
+def test_admin_overview_preserves_filter_page_size_and_global_totals(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    store = app.extensions["indexing_service"].store
+    for index in range(12):
+        store.register_event(
+            f"catalog-{index:02d}", "2026-06-01", f"Catalog Event {index:02d}"
+        )
+
+    response = client.get("/admin/?q=Catalog&per_page=10&page=2")
+
+    assert response.status_code == 200
+    assert b"Page 2 of 2" in response.data
+    assert b"12 matching events" in response.data
+    assert b"Catalog Event 11" in response.data
+    assert b'value="Catalog"' in response.data
+    assert b">12</strong><span>Events" in response.data
+    redirected = client.get("/admin/?q=Catalog&per_page=10&page=9")
+    assert redirected.status_code == 303
+    assert "page=2" in redirected.location
+
+
+def test_inline_admin_search_uses_event_without_code_and_scopes_results(tmp_path):
+    calls = []
+    match_path = None
+
+    def matcher(image, event_id):
+        calls.append((image, event_id))
+        return {
+            "confident": [SimpleNamespace(photo_path=str(match_path), score=0.93)],
+            "possible": [],
+        }
+
+    app = _app(tmp_path, MATCHER=matcher)
+    match_path = _indexed_event(app)
+    client = app.test_client()
+    _login(client)
+
+    detail = client.get("/admin/events/ready-event")
+    response = client.post(
+        "/admin/events/ready-event/search",
+        data={"_csrf_token": _csrf(client), "selfie": _png("selfie.png")},
+        content_type="multipart/form-data",
+    )
+
+    assert b"Search for a person" in detail.data
+    assert b"event code" not in detail.data.lower()
+    assert b"consent" not in detail.data.lower()
+    assert b"No attendee code required" in detail.data
+    assert b"Hang tight" in detail.data
+    assert response.status_code == 303
+    assert response.location.startswith("/admin/events/ready-event?search_token=")
+    assert response.location.endswith("#person-search")
+    assert len(calls) == 1 and calls[0][1] == "ready-event"
+
+    results = client.get(response.location)
+    assert b"Confident matches" in results.data
+    assert str(match_path).encode() not in results.data
+    token = response.location.split("search_token=", 1)[1].split("#", 1)[0]
+    assert client.get(f"/results/{token}").status_code == 404
+
+
+def test_admin_search_download_and_zip_are_limited_to_result_set(tmp_path):
+    match_path = None
+
+    def matcher(_image, _event_id):
+        return {
+            "confident": [SimpleNamespace(photo_path=str(match_path), score=0.9)],
+            "possible": [],
+        }
+
+    app = _app(tmp_path, MATCHER=matcher)
+    match_path = _indexed_event(app)
+    client = app.test_client()
+    _login(client)
+    searched = client.post(
+        "/admin/events/ready-event/search",
+        data={"_csrf_token": _csrf(client), "selfie": _png("selfie.png")},
+        content_type="multipart/form-data",
+    )
+    token = searched.location.split("search_token=", 1)[1].split("#", 1)[0]
+    stored = app.config["RESULT_STORE"].get(token)
+    photo_id = next(iter(stored.photos))
+
+    download = client.get(
+        f"/admin/events/ready-event/search-results/{token}/download/{photo_id}"
+    )
+    archive = client.post(
+        f"/admin/events/ready-event/search-results/{token}/export",
+        data={"_csrf_token": _csrf(client), "photo_ids": [photo_id]},
+    )
+
+    assert download.status_code == 200
+    assert download.data == match_path.read_bytes()
+    assert archive.status_code == 200
+    with ZipFile(BytesIO(archive.data)) as zip_file:
+        assert zip_file.namelist() == [match_path.name]
+        assert zip_file.read(match_path.name) == match_path.read_bytes()
+    assert client.get(
+        f"/admin/events/other-event/search-results/{token}/download/{photo_id}"
+    ).status_code == 404
+
+
+def test_admin_event_page_reports_live_index_percentage(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    indexing = app.extensions["indexing_service"]
+    raw_dir = indexing.events_dir / "progress-event" / "raw"
+    raw_dir.mkdir(parents=True)
+    first = raw_dir / "first.png"
+    second = raw_dir / "second.png"
+    first.write_bytes(_png()[0].getvalue())
+    second.write_bytes(_png()[0].getvalue())
+    indexing.register_event("progress-event", "2026-07-21", "Progress Event")
+    indexing.request_index("progress-event")
+    assert indexing.store.claim_next_event() == ("progress-event", False)
+    indexing.store.start_index_progress("progress-event", 2)
+    indexing.store.record_progress_outcome(
+        "progress-event",
+        ImageIndexOutcome(str(first.resolve()), IndexStatus.INDEXED, face_count=1),
+    )
+
+    response = client.get("/admin/events/progress-event/index-progress")
+    detail = client.get("/admin/events/progress-event")
+
+    assert response.status_code == 200
+    assert response.json == {
+        "status": "indexing",
+        "completed": 1,
+        "total": 2,
+        "percent": 50,
+    }
+    assert b'data-index-progress' in detail.data
+    assert b">50%</strong>" in detail.data
+
+
+def test_admin_photo_import_has_no_total_selection_limit_and_uses_safe_batches(tmp_path):
+    script = (Path(__file__).parents[1] / "src" / "web" / "static" / "admin.js").read_text(
+        encoding="utf-8"
+    )
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    client.post(
+        "/admin/events",
+        data={
+            "_csrf_token": _csrf(client),
+            "title": "Unlimited Uploads",
+            "event_date": "2026-07-21",
+        },
+    )
+    detail = client.get("/admin/events/unlimited-uploads")
+
+    assert b"Select any number" in detail.data
+    assert b"20 photos per upload" not in detail.data
+    assert "MAX_FILES_PER_BATCH = 10" in script
+    assert "MAX_BATCH_BYTES = 200 * 1024 * 1024" in script
