@@ -226,6 +226,77 @@ def test_duplicate_photo_does_not_overwrite_original(tmp_path):
     assert (tmp_path / "events" / "duplicates" / "raw" / "same.png").read_bytes() == original
 
 
+def test_event_deletion_requires_exact_confirmation_and_removes_local_state(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    client.post(
+        "/admin/events",
+        data={
+            "_csrf_token": _csrf(client),
+            "title": "Delete Me",
+            "event_date": "2026-07-21",
+        },
+    )
+    event_root = tmp_path / "events" / "delete-me"
+    (event_root / "raw" / "photo.jpg").write_bytes(b"fixture")
+    (event_root / "indexed").mkdir()
+    (event_root / "indexed" / "faces.faiss").write_bytes(b"index")
+    url = "/admin/events/delete-me/delete"
+
+    rejected = client.post(
+        url,
+        data={"_csrf_token": _csrf(client), "confirmation": "wrong-event"},
+    )
+
+    assert rejected.status_code == 400
+    assert event_root.exists()
+    assert app.extensions["indexing_service"].get_event("delete-me")
+
+    deleted = client.post(
+        url,
+        data={"_csrf_token": _csrf(client), "confirmation": "delete-me"},
+    )
+
+    assert deleted.status_code == 303
+    assert deleted.location.endswith("/admin/")
+    assert not event_root.exists()
+    assert app.extensions["indexing_service"].store.get_event("delete-me") is None
+    assert (
+        app.extensions["indexing_service"].store.get_event_access_code("delete-me")
+        is None
+    )
+    assert client.get("/admin/events/delete-me").status_code == 404
+    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "event_deleted"
+
+
+def test_event_deletion_refuses_active_indexing(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    client.post(
+        "/admin/events",
+        data={
+            "_csrf_token": _csrf(client),
+            "title": "Busy Event",
+            "event_date": "2026-07-21",
+        },
+    )
+    indexing = app.extensions["indexing_service"]
+    indexing.store.queue_event("busy-event")
+    assert indexing.store.claim_next_event()[0] == "busy-event"
+
+    response = client.post(
+        "/admin/events/busy-event/delete",
+        data={"_csrf_token": _csrf(client), "confirmation": "busy-event"},
+    )
+
+    assert response.status_code == 409
+    assert b"active indexing" in response.data
+    assert (tmp_path / "events" / "busy-event").exists()
+    assert indexing.get_event("busy-event")
+
+
 def test_runtime_settings_validate_and_persist(tmp_path):
     store = AdminStore(tmp_path / "admin.sqlite3")
     settings = RuntimeSettings(0.55, 0.72, 350, 0.78, 3)

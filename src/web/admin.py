@@ -245,6 +245,36 @@ def event_detail(event_id: str):
     return _render_event_detail(event_id, search_token=request.args.get("search_token"))
 
 
+@admin.post("/events/<event_id>/delete")
+@admin_required
+def delete_event(event_id: str):
+    event = _get_event_or_404(event_id)
+    if request.form.get("confirmation", "").strip() != event.event_id:
+        return _render_event_detail(
+            event_id,
+            delete_error="Enter the exact event ID to confirm permanent deletion.",
+            status=400,
+        )
+    display_name = event.display_name or event.event_id
+    try:
+        _indexing().delete_event(event.event_id)
+    except RuntimeError as exc:
+        return _render_event_detail(event_id, delete_error=str(exc), status=409)
+    except OSError:
+        current_app.logger.exception("Event files could not be fully deleted")
+        flash(
+            "The event was removed from the catalog, but some local files could not be deleted.",
+            "error",
+        )
+        return redirect(url_for("admin.overview"), code=303)
+
+    _admin_store().record_audit(
+        "event_deleted", event.event_id, title=display_name
+    )
+    flash(f'Event "{display_name}" was permanently deleted.', "success")
+    return redirect(url_for("admin.overview"), code=303)
+
+
 @admin.post("/events/<event_id>/search")
 @admin_required
 def search_person(event_id: str):
@@ -662,6 +692,7 @@ def _render_event_detail(
     search_token: str | None = None,
     search=None,
     search_error: str | None = None,
+    delete_error: str | None = None,
     status: int = 200,
 ):
     event = _get_event_or_404(event_id)
@@ -682,6 +713,7 @@ def _render_event_detail(
             cluster_stale=_cluster_is_stale(event_id),
             search=search,
             search_error=search_error,
+            delete_error=delete_error,
             search_ready=_event_is_searchable(event),
             index_progress=index_progress,
         ),
