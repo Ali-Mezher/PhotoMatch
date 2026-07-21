@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f6f7">
+    <title>{% block title %}Admin{% endblock %} · PhotoMatch</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+    <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
+  </head>
+  <body class="admin-body">
+    <a class="skip-link" href="#admin-main">Skip to content</a>
+    <header class="mobile-bar">
+      <a class="admin-brand" href="{{ url_for('admin.overview') }}"><span class="brand-mark"></span>PhotoMatch</a>
+      <button class="menu-button" type="button" data-menu-toggle aria-expanded="false" aria-controls="admin-nav">Menu</button>
+    </header>
+    <aside class="admin-rail" id="admin-nav">
+      <a class="admin-brand" href="{{ url_for('admin.overview') }}"><span class="brand-mark"></span>PhotoMatch</a>
+      <p class="rail-label">Operator console</p>
+      <nav aria-label="Admin navigation">
+        <a href="{{ url_for('admin.overview') }}" {% if request.endpoint == 'admin.overview' %}aria-current="page"{% endif %}>Overview</a>
+        <a href="{{ url_for('admin.new_event') }}" {% if request.endpoint == 'admin.new_event' %}aria-current="page"{% endif %}>New event</a>
+        <a href="{{ url_for('admin.settings') }}" {% if request.endpoint in ['admin.settings', 'admin.update_settings'] %}aria-current="page"{% endif %}>Settings</a>
+      </nav>
+      <div class="rail-bottom">
+        <a href="{{ url_for('home') }}">Attendee search ↗</a>
+        <form action="{{ url_for('admin.logout') }}" method="post">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button class="text-button" type="submit">Sign out</button>
+        </form>
+      </div>
+    </aside>
+    <main class="admin-main" id="admin-main">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="notice notice-{{ category }}" role="status">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% if error %}<div class="notice notice-error" role="alert">{{ error }}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

@@ -1,0 +1,38 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ event.display_name or event.event_id }}{% endblock %}
+{% block content %}
+<header class="page-header split-header">
+  <div><a class="back-link" href="{{ url_for('admin.overview') }}">← All events</a><h1>{{ event.display_name or event.event_id }}</h1><p>{{ event.event_date }} · <code>{{ event.event_id }}</code></p></div>
+  <div class="event-code"><span>Attendee code</span><strong>{{ access_code }}</strong></div>
+</header>
+<section class="summary-strip event-summary">
+  <div><strong>{{ event.total_images }}</strong><span>Photos</span></div><div><strong>{{ event.indexed_images }}</strong><span>Indexed</span></div><div><strong>{{ event.no_face_images }}</strong><span>No face</span></div><div><strong>{{ event.failed_images }}</strong><span>Failed</span></div>
+</section>
+<div class="two-column">
+  <section class="form-panel upload-panel">
+    <div class="section-heading"><div><h2>Add photos</h2><p>JPG or PNG · 50 MB per photo · 20 photos per upload batch.</p></div></div>
+    <form action="{{ url_for('admin.upload_photos', event_id=event.event_id) }}" method="post" enctype="multipart/form-data" data-batch-upload>
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <label class="drop-zone" for="event-photos"><strong>Choose photos or drop them here</strong><span data-upload-copy>Multiple files are supported.</span><input id="event-photos" type="file" name="photos" accept="image/jpeg,image/png" multiple required></label>
+      <div class="upload-progress" hidden data-upload-progress><div><span data-upload-bar></span></div><p aria-live="polite" data-upload-status></p></div>
+      <button class="button button-primary" type="submit">Import and index</button>
+    </form>
+  </section>
+  <section class="form-panel operations-panel">
+    <div class="section-heading"><div><h2>Processing</h2><p>Indexing and clustering run one at a time.</p></div><span class="status status-{{ event.status.value }}">{{ event.status.value|replace('_', ' ') }}</span></div>
+    {% if event.error %}<div class="notice notice-error">{{ event.error }}</div>{% endif %}
+    <dl class="detail-list"><div><dt>Pending images</dt><dd>{{ event.pending_images }}</dd></div><div><dt>Cluster result</dt><dd>{% if cluster %}<a href="{{ url_for('admin.cluster_review', event_id=event.event_id, run_id=cluster.run_id) }}">{{ 'Stale — run again' if cluster_stale else cluster.status|capitalize }}</a>{% else %}Not run{% endif %}</dd></div></dl>
+    <div class="operation-actions">
+      <form action="{{ url_for('admin.index_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Check and index</button></form>
+      {% if event.failed_images %}<form action="{{ url_for('admin.retry_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Retry failed</button></form>{% endif %}
+      <form action="{{ url_for('admin.cluster_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-primary" type="submit" {% if event.status.value != 'indexed' or event.pending_images or event.failed_images %}disabled title="Finish indexing first"{% endif %}>Cluster identities</button></form>
+    </div>
+  </section>
+</div>
+<section class="section-block">
+  <div class="section-heading"><div><h2>Photo inventory</h2><p>Each source image is tracked independently, so new additions do not reindex completed photos.</p></div></div>
+  <div class="table-wrap"><table><thead><tr><th>Filename</th><th>Status</th><th>Faces</th><th>Updated</th><th>Issue</th></tr></thead><tbody>
+    {% for image in images %}<tr><td data-label="Filename"><strong>{{ image.photo_path|basename }}</strong></td><td data-label="Status"><span class="status status-{{ image.status.value }}">{{ image.status.value|replace('_', ' ') }}</span></td><td data-label="Faces">{{ image.face_count }}</td><td data-label="Updated">{{ image.updated_at or '—' }}</td><td data-label="Issue">{{ image.error or '—' }}</td></tr>{% else %}<tr><td colspan="5" class="empty-cell">No photos imported yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

@@ -23,7 +23,7 @@
 ## Week 3 — Indexing, Matching & Interface
 | Issue | Task | Ownership | Status | Notes |
 |-------|------|-----------|--------|-------|
-| [#8](https://github.com/Ali-Mezher/PhotoMatch/issues/8) | Indexing: build per-event FAISS vector index | Ali Mezher & Mahmood Tendail | ✅ Done | Builds, saves, loads, and queries an isolated FAISS index per event; covered by an end-to-end integration test. |
+| [#8](https://github.com/Ali-Mezher/PhotoMatch/issues/8) | Indexing: build per-event FAISS vector index | Ali Mezher & Mahmood Tendail | ✅ Done | Builds, saves, loads, and queries an isolated FAISS index per event. SQLite-backed per-image status now enables incremental additions, ordered background jobs, and safe rebuilds for changed/deleted sources. Use `scripts/demo_goated_index_and_search.py`; pass `--force` only for a complete rebuild. |
 | [#9](https://github.com/Ali-Mezher/PhotoMatch/issues/9) | Matching: cosine similarity search & confidence-tiered results | Ali Mezher & Mahmood Tendail | ✅ Done | Selfie embeddings are searched against one event's FAISS index, deduplicated by photo, and returned in confidence tiers; final threshold tuning remains in issue #10. |
 | [#10](https://github.com/Ali-Mezher/PhotoMatch/issues/10) | Matching: threshold tuning (FAR vs FRR trade-off) | Ali Mezher & Nourallah Mourad | ✅ Done | Tested FAR/FRR tuner recommends confident and possible thresholds from labeled genuine/impostor scores; collect a representative dataset before changing production values. |
 | [#11](https://github.com/Ali-Mezher/PhotoMatch/issues/11) | Interface: selfie upload & results display UI | Nourallah Mourad & Mahmood Tendail | ✅ Done | Selfie validation and preview, background matching, confidence-tiered results, responsive thumbnails, and pipeline error handling are implemented and covered by integration-focused tests. |
@@ -51,9 +51,9 @@
 ## Post-Core — Stretch Goals
 | Issue | Task | Ownership | Status | Notes |
 |-------|------|-----------|--------|-------|
-| #20 | Interface: auto-clustering of similar faces *(stretch goal)* | — | ⬜ Not started | Cluster detected faces into candidate identities for staff review. |
+| #20 | Interface: auto-clustering of similar faces *(stretch goal)* | — | ✅ Done | Operators can run DBSCAN clustering against an immutable event index, review face groups and unclustered faces, and optionally add labels. Runs, parameters, members, and stale-generation state are persisted. |
 | #21 | Security: liveness / anti-spoofing *(stretch goal)* | — | ⬜ Not started | Add and evaluate a basic blink, motion, or texture-based check to reduce searches using another person's photograph. |
-| #22 | Interface: watermarked previews & admin dashboard *(stretch goal)* | — | ⬜ Not started | Show protected previews and give staff indexing status, failed-job retry, and manual review controls. |
+| #22 | Interface: watermarked previews & admin dashboard *(stretch goal)* | — | ✅ Done | The attendee web flow uses protected previews and original-only exports. The authenticated local operator dashboard creates events, safely imports photos, exposes access codes and per-image status, coordinates indexing, supports retries, and controls validated runtime settings. |
 
 ---
 
