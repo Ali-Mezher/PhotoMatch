@@ -75,3 +75,9 @@ data/indexing_status.sqlite3-*
 # Env
 .env
 *.env
+
+# testosterone branch: checked-in local event fixtures.
+# Keep this override at the end so it wins over the privacy/data rules above.
+!data/events/
+!data/events/**
+!data/indexing_status.sqlite3
