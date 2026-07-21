@@ -13,8 +13,10 @@ dist/
 build/
 .eggs/
 .venv/
+.venv,/
 venv/
 env/
+then/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -28,6 +30,12 @@ data/events/**/*.png
 data/events/**/*.JPG
 data/events/**/*.JPEG
 data/events/**/*.PNG
+
+# Evaluation photos, identities, and generated reports (real people's
+# faces + names) — keep the folder and its README, ignore everything
+# the team drops into it.
+data/evaluation/*/
+!data/evaluation/README.md
 
 # Embeddings and indexes
 *.index
