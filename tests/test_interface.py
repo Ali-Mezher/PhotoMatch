@@ -61,6 +61,29 @@ def test_search_worker_explains_unindexed_event():
     assert "hasn't been indexed" in callback[2]
 
 
+def test_cluster_worker_returns_groups_to_ui_thread():
+    app = _worker_app()
+    app._show_clusters = Mock()
+    payload = {"clusters": [], "unclustered_count": 1}
+
+    with patch("src.interface.app.cluster_event_if_needed", return_value=(payload, True)):
+        app._cluster_worker("graduation")
+
+    app.root.after.assert_called_once_with(0, app._show_clusters, payload, True)
+
+
+def test_cluster_worker_explains_unindexed_event():
+    app = _worker_app()
+    app._show_cluster_error = Mock()
+
+    with patch("src.interface.app.cluster_event_if_needed", side_effect=FileNotFoundError):
+        app._cluster_worker("graduation")
+
+    callback = app.root.after.call_args.args
+    assert callback[:2] == (0, app._show_cluster_error)
+    assert "must be indexed" in callback[2]
+
+
 def test_show_results_keeps_confident_and_possible_tiers_separate():
     app = PhotoMatchApp.__new__(PhotoMatchApp)
     app.status_var = Mock()
