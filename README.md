@@ -119,7 +119,7 @@ python -m src.web
 ```
 
 The dashboard creates events, imports JPG/PNG photos, queues incremental indexing,
-shows attendee codes, controls a validated subset of search settings, and runs
+shows live per-event indexing progress and attendee codes, controls a validated subset of search settings, and runs
 review-only identity clustering. Each event page can also run an in-memory person
 search without re-entering the attendee code. The event inventory supports filtering
 by name, internal ID, attendee code, or date, with configurable page sizes for larger

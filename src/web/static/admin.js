@@ -10,6 +10,35 @@
     window.setTimeout(() => window.location.reload(), 2500);
   }
 
+  const indexProgress = document.querySelector("[data-index-progress]");
+  if (indexProgress?.dataset.active === "true") {
+    const label = indexProgress.querySelector("[data-progress-label]");
+    const percent = indexProgress.querySelector("[data-progress-percent]");
+    const bar = indexProgress.querySelector("[data-progress-bar]");
+    const refreshProgress = async () => {
+      try {
+        const response = await fetch(indexProgress.dataset.url, {
+          headers: { "Accept": "application/json" },
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("Progress unavailable");
+        const result = await response.json();
+        percent.textContent = `${result.percent}%`;
+        bar.value = result.percent;
+        label.textContent = result.status === "queued" ? "Waiting" : "Indexing";
+        if (result.status === "queued" || result.status === "indexing") {
+          window.setTimeout(refreshProgress, 1000);
+        } else {
+          label.textContent = result.status === "indexed" ? "Complete" : "Stopped";
+          window.setTimeout(() => window.location.reload(), 650);
+        }
+      } catch (_error) {
+        window.setTimeout(refreshProgress, 2000);
+      }
+    };
+    refreshProgress();
+  }
+
   const selectionForm = document.querySelector("[data-selection-form]");
   if (selectionForm) {
     const checkboxes = [...selectionForm.querySelectorAll('input[name="photo_ids"]')];

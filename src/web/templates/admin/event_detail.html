@@ -22,6 +22,10 @@
   <section class="form-panel operations-panel">
     <div class="section-heading"><div><h2>Processing</h2><p>Indexing and clustering run one at a time.</p></div><span class="status status-{{ event.status.value }}">{{ event.status.value|replace('_', ' ') }}</span></div>
     {% if event.error %}<div class="notice notice-error">{{ event.error }}</div>{% endif %}
+    <div class="index-progress" data-index-progress data-active="{{ 'true' if event.status.value in ['queued', 'indexing'] else 'false' }}" data-url="{{ url_for('admin.index_progress', event_id=event.event_id) }}" {% if event.status.value not in ['queued', 'indexing'] %}hidden{% endif %}>
+      <div><span data-progress-label>{{ 'Waiting' if event.status.value == 'queued' else 'Indexing' }}</span><strong data-progress-percent>{{ index_progress.percent }}%</strong></div>
+      <progress data-progress-bar value="{{ index_progress.percent }}" max="100" aria-label="Indexing progress">{{ index_progress.percent }}%</progress>
+    </div>
     <dl class="detail-list"><div><dt>Pending images</dt><dd>{{ event.pending_images }}</dd></div><div><dt>Cluster result</dt><dd>{% if cluster %}<a href="{{ url_for('admin.cluster_review', event_id=event.event_id, run_id=cluster.run_id) }}">{{ 'Stale — run again' if cluster_stale else cluster.status|capitalize }}</a>{% else %}Not run{% endif %}</dd></div></dl>
     <div class="operation-actions">
       <form action="{{ url_for('admin.index_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Check and index</button></form>
