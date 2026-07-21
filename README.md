@@ -67,14 +67,47 @@ source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-The interface (`src/interface/`) uses Tkinter, which ships with Python
-on Windows and macOS. On Linux you may need to install it separately:
+The public attendee interface uses Flask. Launch it locally with:
+
+```bash
+python -m src.web
+```
+
+Then open `http://127.0.0.1:5000`. The server binds to localhost in this
+development entry point. Attendees enter the 8-character code printed by the event's
+index command; events are not listed on the public page. The existing desktop interface
+(`src/interface/`) remains available during web-interface review and uses Tkinter, which
+ships with Python on Windows and macOS. On Linux you may need to install it separately:
 ```bash
 sudo apt install python3-tk
 ```
 
 Full contributor workflow (branching, PRs, review): see
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+### Operator dashboard
+
+The authenticated local dashboard is available at `http://127.0.0.1:5000/admin/`.
+Before starting the app, configure one operator account and a stable Flask secret for
+the current PowerShell session:
+
+```powershell
+$env:PHOTOMATCH_ADMIN_USERNAME = "operator"
+$env:PHOTOMATCH_ADMIN_PASSWORD = 'choose-a-password'
+$env:PHOTOMATCH_SECRET_KEY = '<a long random local secret>'
+python -m src.web
+```
+
+The dashboard creates events, imports JPG/PNG photos, queues incremental indexing,
+shows attendee codes, controls a validated subset of search settings, and runs
+review-only identity clustering. The worker is interrupt-driven and serializes
+indexing and clustering; it never scans on a timer. Set
+`PHOTOMATCH_BACKGROUND_WORKER=0` only when a separate process owns background work.
+Debug mode is off by default and can be explicitly enabled for local development with
+`PHOTOMATCH_DEBUG=1`.
+
+See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for every supported environment
+variable, its default, and standard local, paused-worker, debug, and HTTPS examples.
 
 ## Running the tests
 
@@ -83,7 +116,8 @@ pip install pytest
 pytest tests/ -v
 ```
 
-130 tests across preprocessing, detection, indexing, matching, threshold tuning, and
+Tests across preprocessing, detection, indexing, matching, the Flask interfaces,
+clustering, threshold tuning, and
 evaluation — all run on synthetic data and need no model downloads or sample photos.
 Full detection/embedding inference needs `mtcnn` and `deepface`
 installed (already in `requirements.txt`) — see the integration-check
@@ -98,11 +132,17 @@ Once you have real (or stand-in) photos locally under
 # Run preprocess -> detect -> embed on a single photo:
 python scripts/demo_pipeline.py path/to/photo.jpg
 
-# Build the searchable index for an event:
-python scripts/demo_index_and_search.py index my_event
+# First index run (registers the event date and prints its attendee code):
+python scripts/demo_goated_index_and_search.py index my_event --date 2026-07-01
+
+# Later runs process only newly added photos:
+python scripts/demo_goated_index_and_search.py index my_event
+
+# Force a complete rebuild after manual recovery work:
+python scripts/demo_goated_index_and_search.py index my_event --force
 
 # Search that event with a selfie, from the command line:
-python scripts/demo_index_and_search.py search my_event path/to/selfie.jpg
+python scripts/demo_goated_index_and_search.py search my_event path/to/selfie.jpg
 
 # Tune thresholds from labeled genuine/impostor similarity scores:
 python scripts/tune_thresholds.py path/to/scores.csv
@@ -110,6 +150,34 @@ python scripts/tune_thresholds.py path/to/scores.csv
 # Or launch the full kiosk app:
 python -m src.interface.app
 ```
+
+## Incremental indexing service
+
+`src.services.IndexingService` keeps event and per-image indexing state in a
+local SQLite database. Once an event has been indexed, adding a photo processes
+only that photo. Changing or removing an existing photo safely rebuilds that
+event so stale faces cannot remain searchable.
+
+The worker is interrupt-driven: it sleeps until `request_index()` is called and
+does not scan on a timer. Application layers should register/import an image,
+then signal its event:
+
+```python
+from src.services import IndexingService
+
+indexing = IndexingService()
+indexing.register_event("graduation_2026", "2026-07-01")
+indexing.start()
+indexing.request_index("graduation_2026")
+
+# During application shutdown:
+indexing.shutdown()
+```
+
+Queued events run one at a time, ordered by their explicit event date (oldest
+first). `demo_goated_index_and_search.py index` uses this incremental path; pass
+`--force` only when a complete recovery rebuild is required. Starting and supervising
+the shared worker is now handled by the Flask operator dashboard.
 
 The threshold-tuning CSV needs `score` and `label` columns. Use
 `genuine` when both faces belong to the same person and `impostor` when

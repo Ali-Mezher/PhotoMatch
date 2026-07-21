@@ -48,7 +48,11 @@ def cosine_similarity(embedding_a: np.ndarray, embedding_b: np.ndarray) -> float
     return float(np.dot(embedding_a, embedding_b) / (norm_a * norm_b))
 
 
-def classify_tier(score: float) -> str | None:
+def classify_tier(
+    score: float,
+    possible_threshold: float = POSSIBLE_MATCH_THRESHOLD,
+    confident_threshold: float = CONFIDENT_MATCH_THRESHOLD,
+) -> str | None:
     """
     Classify a similarity score into one of the two result tiers from
     the proposal: "confident" and "possible". Everything below the
@@ -68,8 +72,10 @@ def classify_tier(score: float) -> str | None:
         config.py as starting points — Week 4 evaluation (FAR/FRR) is
         what should actually tune these, not a guess made here.
     """
-    if score >= CONFIDENT_MATCH_THRESHOLD:
+    if not 0 <= possible_threshold < confident_threshold <= 1:
+        raise ValueError("thresholds must satisfy 0 <= possible < confident <= 1")
+    if score >= confident_threshold:
         return "confident"
-    if score >= POSSIBLE_MATCH_THRESHOLD:
+    if score >= possible_threshold:
         return "possible"
     return None

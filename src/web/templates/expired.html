@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Search Expired · PhotoMatch{% endblock %}
+
+{% block content %}
+<section class="message-shell">
+  <p class="eyebrow">Search expired</p>
+  <h1>Start a New Search</h1>
+  <p>This protected result link is no longer active. Your selfie was not retained.</p>
+  <a class="button button-primary" href="{{ url_for('home') }}">Return to Event Search</a>
+</section>
+{% endblock %}
