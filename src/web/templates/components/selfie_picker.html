@@ -43,3 +43,15 @@
   </dialog>
 </div>
 {% endmacro %}
+
+{% macro search_submit(label, wide=false, disabled=false) %}
+<div class="search-submit{% if wide %} search-submit-wide{% endif %}">
+  <button class="button button-primary{% if wide %} button-wide{% endif %}" type="submit" data-search-submit data-search-disabled="{{ 'true' if disabled else 'false' }}" {% if disabled %}disabled{% endif %}>
+    <span data-search-submit-label>{{ label }}</span>
+  </button>
+  <div class="search-pending" data-search-pending role="status" aria-live="polite" hidden>
+    <span class="search-spinner" aria-hidden="true"></span>
+    <span><strong>Hang tight — searching photos</strong><small>This can take a moment for larger events.</small></span>
+  </div>
+</div>
+{% endmacro %}

@@ -102,18 +102,37 @@
     let imported = 0;
     let rejected = 0;
     try {
+      const MAX_FILES_PER_BATCH = 10;
+      const MAX_BATCH_BYTES = 200 * 1024 * 1024;
       const batches = [];
-      for (let index = 0; index < files.length; index += 20) batches.push(files.slice(index, index + 20));
+      let batch = [];
+      let batchBytes = 0;
+      files.forEach((file) => {
+        const batchIsFull = batch.length >= MAX_FILES_PER_BATCH;
+        const batchIsTooLarge = batch.length && batchBytes + file.size > MAX_BATCH_BYTES;
+        if (batchIsFull || batchIsTooLarge) {
+          batches.push(batch);
+          batch = [];
+          batchBytes = 0;
+        }
+        batch.push(file);
+        batchBytes += file.size;
+      });
+      if (batch.length) batches.push(batch);
+      let uploadedFiles = 0;
       for (let index = 0; index < batches.length; index += 1) {
         const body = new FormData();
         body.append("_csrf_token", csrf);
         body.append("final_batch", index === batches.length - 1 ? "1" : "0");
         batches[index].forEach(file => body.append("photos", file));
-        status.textContent = `Uploading batch ${index + 1} of ${batches.length}…`;
+        const firstPhoto = uploadedFiles + 1;
+        const lastPhoto = uploadedFiles + batches[index].length;
+        status.textContent = `Uploading photos ${firstPhoto}–${lastPhoto} of ${files.length}…`;
         const response = await fetch(form.action, { method: "POST", body, headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" } });
         const result = await response.json();
         imported += result.imported || 0;
         rejected += result.rejected || 0;
+        uploadedFiles = lastPhoto;
         bar.style.width = `${((index + 1) / batches.length) * 100}%`;
         if (!response.ok && !result.outcomes) throw new Error(result.error || "Upload failed.");
       }
