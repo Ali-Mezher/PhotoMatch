@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 import sqlite3
 from types import SimpleNamespace
 from zipfile import ZipFile
@@ -346,6 +347,8 @@ def test_inline_admin_search_uses_event_without_code_and_scopes_results(tmp_path
     assert b"Search for a person" in detail.data
     assert b"event code" not in detail.data.lower()
     assert b"consent" not in detail.data.lower()
+    assert b"No attendee code required" in detail.data
+    assert b"Hang tight" in detail.data
     assert response.status_code == 303
     assert response.location.startswith("/admin/events/ready-event?search_token=")
     assert response.location.endswith("#person-search")
@@ -431,3 +434,26 @@ def test_admin_event_page_reports_live_index_percentage(tmp_path):
     }
     assert b'data-index-progress' in detail.data
     assert b">50%</strong>" in detail.data
+
+
+def test_admin_photo_import_has_no_total_selection_limit_and_uses_safe_batches(tmp_path):
+    script = (Path(__file__).parents[1] / "src" / "web" / "static" / "admin.js").read_text(
+        encoding="utf-8"
+    )
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    client.post(
+        "/admin/events",
+        data={
+            "_csrf_token": _csrf(client),
+            "title": "Unlimited Uploads",
+            "event_date": "2026-07-21",
+        },
+    )
+    detail = client.get("/admin/events/unlimited-uploads")
+
+    assert b"Select any number" in detail.data
+    assert b"20 photos per upload" not in detail.data
+    assert "MAX_FILES_PER_BATCH = 10" in script
+    assert "MAX_BATCH_BYTES = 200 * 1024 * 1024" in script

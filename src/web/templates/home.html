@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "components/selfie_picker.html" import selfie_picker %}
+{% from "components/selfie_picker.html" import search_submit, selfie_picker %}
 {% block title %}Find Your Event Photos · PhotoMatch{% endblock %}
 
 {% block content %}
@@ -30,6 +30,7 @@
     action="{{ url_for('search', access_token=access_token) }}"
     method="post"
     enctype="multipart/form-data"
+    data-search-form
   >
     <div class="form-heading">
       <span class="step-count">Step 2 of 2</span>
@@ -68,9 +69,7 @@
       {{ selfie_picker() }}
     </div>
 
-    <button class="button button-primary button-wide" type="submit">
-      Search This Event
-    </button>
+    {{ search_submit('Search This Event', wide=true) }}
   </form>
   {% else %}
   <form class="search-form access-form" action="{{ url_for('event_access') }}" method="post">

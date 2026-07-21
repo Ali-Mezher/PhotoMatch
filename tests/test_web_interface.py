@@ -126,6 +126,8 @@ def test_home_hides_event_catalog_and_unlocks_only_the_matching_event(web_setup)
     assert b'capture="user"' in search_form.data
     assert b'data-selfie-upload' in search_form.data
     assert b'aria-pressed="false"' in search_form.data
+    assert b'data-search-form' in search_form.data
+    assert b"Hang tight" in search_form.data
 
 
 def test_selfie_picker_uses_exclusive_selected_source_states():
@@ -137,6 +139,17 @@ def test_selfie_picker_uses_exclusive_selected_source_states():
     assert 'source === "camera"' in script
     assert 'pendingSource = "camera"' in script
     assert 'classList.toggle("is-selected"' in script
+
+
+def test_search_forms_expose_a_busy_state_and_prevent_duplicate_submissions():
+    script = (Path(__file__).parents[1] / "src" / "web" / "static" / "search-state.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "form.checkValidity()" in script
+    assert 'form.setAttribute("aria-busy", "true")' in script
+    assert "submit.disabled = true" in script
+    assert "pending.hidden = false" in script
 
 
 def test_invalid_unready_and_expired_event_access_are_actionable(web_setup):
