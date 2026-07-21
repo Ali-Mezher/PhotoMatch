@@ -8,6 +8,7 @@
     <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
     <script src="{{ url_for('static', filename='selfie-picker.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='liveness.js') }}" defer></script>
     <script src="{{ url_for('static', filename='search-state.js') }}" defer></script>
     <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </head>
@@ -25,7 +26,7 @@
     </main>
 
     <footer class="site-footer">
-      <p>Your selfie is processed in memory for this search and is not saved.</p>
+      <p>Your live-selfie frames are processed in memory for this search and are not saved.</p>
     </footer>
   </body>
 </html>

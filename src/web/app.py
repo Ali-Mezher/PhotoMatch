@@ -44,6 +44,11 @@ from src.services.work_coordinator import AdminWorkCoordinator
 
 from .access import EventAccessGate
 from .admin import admin
+from .liveness import (
+    LivenessChallengeStore,
+    LivenessVerificationError,
+    LivenessVerifier,
+)
 from .media import InvalidImageError, decode_selfie, render_watermarked_preview
 from .result_store import SearchResultStore, StoredPhoto, StoredSearch
 from .search_results import (
@@ -76,6 +81,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         EVENT_ACCESS_TTL_SECONDS=30 * 60,
         EVENT_ACCESS_GATE=None,
         EVENT_ACCESS_RESOLVER=None,
+        LIVENESS_CHALLENGE_TTL_SECONDS=2 * 60,
+        LIVENESS_CHALLENGE_STORE=None,
+        LIVENESS_VERIFIER=None,
         RESULT_TTL_SECONDS=15 * 60,
         MATCHER=match_selfie,
         EVENT_CATALOG=None,
@@ -104,6 +112,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         app.config["EVENT_ACCESS_GATE"] = EventAccessGate(
             ttl_seconds=app.config["EVENT_ACCESS_TTL_SECONDS"]
         )
+    if app.config["LIVENESS_CHALLENGE_STORE"] is None:
+        app.config["LIVENESS_CHALLENGE_STORE"] = LivenessChallengeStore(
+            ttl_seconds=app.config["LIVENESS_CHALLENGE_TTL_SECONDS"]
+        )
+    if app.config["LIVENESS_VERIFIER"] is None:
+        app.config["LIVENESS_VERIFIER"] = LivenessVerifier()
 
     admin_store = app.config["ADMIN_STORE"] or AdminStore(
         Path(app.config["INDEX_STATUS_DB"])
@@ -270,29 +284,52 @@ def register_routes(app: Flask) -> None:
                 status=400,
             )
 
-        upload = request.files.get("selfie")
-        if upload is None or not upload.filename:
+        challenge_token = request.form.get("liveness_token", "")
+        challenge = _liveness_challenge_store().consume(
+            challenge_token, event_id, access_token
+        )
+        if challenge is None:
             return _render_event_form(
                 event,
                 access_token,
-                error="Choose a selfie image, then try the search again.",
+                error="The live-selfie check expired or was already used. Restart it.",
+                status=400,
+            )
+
+        frame_fields = ("liveness_front", "liveness_turn", "liveness_return")
+        uploads = [request.files.get(field) for field in frame_fields]
+        if any(upload is None or not upload.filename for upload in uploads):
+            return _render_event_form(
+                event,
+                access_token,
+                error="Complete all 3 live-selfie steps before searching.",
                 status=400,
             )
 
         try:
-            selfie = decode_selfie(upload)
+            frames = [decode_selfie(upload) for upload in uploads]
+            selfie = _liveness_verifier().verify(
+                frames[0], frames[1], frames[2], challenge.direction
+            )
             raw_matches = current_app.config["MATCHER"](selfie, event_id)
         except InvalidImageError as exc:
             return _render_event_form(
-                event, access_token, error=str(exc), status=400
+                event,
+                access_token,
+                error=f"A live-selfie frame was unreadable. {exc} Restart the check.",
+                status=400,
+            )
+        except LivenessVerificationError as exc:
+            return _render_event_form(
+                event, access_token, error=str(exc), status=422
             )
         except NoFaceDetectedError:
             return _render_event_form(
                 event,
                 access_token,
                 error=(
-                    "No face was found in that selfie. Use a clear, front-facing "
-                    "photo or ask staff for manual photo lookup."
+                    "No face was found in the verified selfie. Restart the live "
+                    "check or ask staff for manual photo lookup."
                 ),
                 status=422,
             )
@@ -387,7 +424,10 @@ def register_routes(app: Flask) -> None:
             return _render_event_form(
                 event,
                 access_token,
-                error="That selfie is too large. Choose an image smaller than 12 MB.",
+                error=(
+                    "The live-selfie capture was too large. Restart the check or "
+                    "ask staff for manual photo lookup."
+                ),
                 status=413,
             )
         return _render_home(
@@ -423,6 +463,7 @@ def _render_event_form(
     error: str | None = None,
     status: int = 200,
 ):
+    challenge = _liveness_challenge_store().issue(event.event_id, access_token)
     return (
         render_template(
             "home.html",
@@ -430,6 +471,7 @@ def _render_event_form(
             entered_code="",
             unlocked_event=event,
             access_token=access_token,
+            liveness_challenge=challenge,
         ),
         status,
     )
@@ -537,3 +579,11 @@ def _result_store() -> SearchResultStore:
 
 def _event_access_gate() -> EventAccessGate:
     return current_app.config["EVENT_ACCESS_GATE"]
+
+
+def _liveness_challenge_store() -> LivenessChallengeStore:
+    return current_app.config["LIVENESS_CHALLENGE_STORE"]
+
+
+def _liveness_verifier() -> LivenessVerifier:
+    return current_app.config["LIVENESS_VERIFIER"]

@@ -5,7 +5,7 @@ Golden Camera, a photography business shooting weddings, corporate
 events, and school/university graduations.
 
 Students currently spend 5–6 hours manually searching 10,000+ photos per
-event to find themselves. PhotoMatch lets them upload one selfie and get
+event to find themselves. PhotoMatch lets attendees complete a live selfie check and get
 their photos back in seconds — running entirely on local hardware, no
 cloud upload, no per-event cost.
 
@@ -95,7 +95,10 @@ python -m src.web
 
 Then open `http://127.0.0.1:5000`. The server binds to localhost in this
 development entry point. Attendees enter the 8-character code printed by the event's
-index command; events are not listed on the public page. The existing desktop interface
+index command; events are not listed on the public page. Public biometric search requires
+camera access and a randomized 3-step head-turn check. Attendees who cannot or prefer not
+to use it can ask staff for manual lookup. Camera frames and embeddings stay in memory and
+are not saved. The existing desktop interface
 (`src/interface/`) remains available during web-interface review and uses Tkinter, which
 ships with Python on Windows and macOS. On Linux you may need to install it separately:
 ```bash
@@ -123,7 +126,8 @@ shows live per-event indexing progress and attendee codes, controls a validated 
 review-only identity clustering. Each event page can also run an in-memory person
 search without re-entering the attendee code. The event inventory supports filtering
 by name, internal ID, attendee code, or date, with configurable page sizes for larger
-catalogs. The worker is interrupt-driven and serializes indexing and clustering; it
+catalogs. The overview shows the 5 latest audit entries, with a separate 25/50/100-row
+activity history. The worker is interrupt-driven and serializes indexing and clustering; it
 never scans on a timer. Set
 `PHOTOMATCH_BACKGROUND_WORKER=0` only when a separate process owns background work.
 Debug mode is off by default and can be explicitly enabled for local development with

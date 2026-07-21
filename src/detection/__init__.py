@@ -11,7 +11,15 @@ from .face_detector import FaceDetector, Detection
 from .embeddings import EmbeddingExtractor
 from src.preprocessing import crop_face_region
 
-__all__ = ["FaceDetector", "Detection", "EmbeddingExtractor", "FaceEmbedding", "detect_and_embed"]
+__all__ = [
+    "FaceDetector",
+    "Detection",
+    "EmbeddingExtractor",
+    "FaceEmbedding",
+    "detect_faces",
+    "embed_detection",
+    "detect_and_embed",
+]
 
 
 @dataclass
@@ -30,6 +38,17 @@ _detector = FaceDetector()
 _extractor = EmbeddingExtractor()
 
 
+def detect_faces(image: np.ndarray) -> list[Detection]:
+    """Detect faces with the process-wide detector instance."""
+    return _detector.detect(image)
+
+
+def embed_detection(image: np.ndarray, detection: Detection) -> np.ndarray:
+    """Embed one detection with the process-wide embedding model."""
+    face_crop = crop_face_region(image, detection.bbox, margin=0.2)
+    return _extractor.get_embedding(face_crop)
+
+
 def detect_and_embed(image: np.ndarray) -> list[FaceEmbedding]:
     """
     Full detect -> crop -> embed pipeline for one photo. This is what
@@ -46,13 +65,12 @@ def detect_and_embed(image: np.ndarray) -> list[FaceEmbedding]:
         Empty list if no faces found — this is expected for some event
         photos (venue shots, decor) and should not raise.
     """
-    detections = _detector.detect(image)
+    detections = detect_faces(image)
 
     results = []
     for detection in detections:
-        face_crop = crop_face_region(image, detection.bbox, margin=0.2)
         try:
-            embedding = _extractor.get_embedding(face_crop)
+            embedding = embed_detection(image, detection)
         except ValueError:
             # Bad crop or deepface couldn't process it — skip this face
             # rather than failing the whole photo.
