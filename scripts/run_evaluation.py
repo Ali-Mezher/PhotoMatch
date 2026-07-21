@@ -8,7 +8,7 @@ Setup required before running (see src/evaluation/ground_truth.py for
 the exact layout):
 
     1. Index the event normally:
-       python scripts/demo_index_and_search.py index <event_id>
+       python scripts/demo_goated_index_and_search.py index <event_id>
 
     2. Under data/evaluation/<event_id>/identities/, create one folder
        per person with a selfie/ and matches/ subfolder — drop their
