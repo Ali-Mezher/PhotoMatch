@@ -25,6 +25,10 @@ remaining work. Weeks 1–3 (proposal through interface) are done. See
 Ingest → Preprocess → Detect & Embed → Index → Match → Deliver
 ```
 
+Indexed events can also be grouped into conservative, staff-review candidate
+identity clusters. This is separate from selfie matching: it never assigns a
+person's name automatically and leaves uncertain faces unclustered.
+
 | Stage | Module | Owner |
 |---|---|---|
 | Preprocessing | `src/preprocessing/` | Ali Mezher |
@@ -121,6 +125,9 @@ python scripts/tune_thresholds.py path/to/scores.csv
 
 # Or launch the full kiosk app:
 python -m src.interface.app
+
+# Create candidate identity clusters for an already indexed event:
+python scripts/cluster_event.py my_event
 ```
 
 The threshold-tuning CSV needs `score` and `label` columns. Use

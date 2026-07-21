@@ -21,8 +21,9 @@ from tkinter import filedialog, messagebox, ttk
 import cv2
 from PIL import Image, ImageOps, ImageTk
 
-from src.matching import EventNotIndexedError, NoFaceDetectedError
-from src.services import PhotoMatchService
+from config import EVENTS_DIR
+from src.clustering import cluster_event_if_needed
+from src.matching import match_selfie, NoFaceDetectedError, EventNotIndexedError
 
 THUMBNAIL_SIZE = (160, 160)
 SELFIE_PREVIEW_SIZE = (96, 96)
@@ -74,7 +75,11 @@ class PhotoMatchApp:
             side="left", padx=(0, 10)
         )
         self.search_button = ttk.Button(top_frame, text="Search", command=self._run_search)
-        self.search_button.pack(side="left")
+        self.search_button.pack(side="left", padx=(0, 8))
+        self.cluster_button = ttk.Button(
+            top_frame, text="Cluster Event", command=self._run_clustering
+        )
+        self.cluster_button.pack(side="left")
 
         self.status_var = tk.StringVar(value="Select an event and a selfie to begin.")
         ttk.Label(self.root, textvariable=self.status_var, padding=(12, 0)).pack(fill="x")
@@ -181,6 +186,31 @@ class PhotoMatchApp:
         except Exception as exc:  # noqa: BLE001 — show *something* rather than freeze
             self.root.after(0, self._show_error, f"Something went wrong: {exc}")
 
+    def _run_clustering(self):
+        """Cluster the selected event once, without freezing the window."""
+        event_id = self.event_var.get()
+        if not event_id:
+            messagebox.showwarning("No event selected", "Please choose an event first.")
+            return
+
+        self.cluster_button.config(state="disabled")
+        self.status_var.set("Checking saved clusters...")
+        self._clear_results()
+        threading.Thread(target=self._cluster_worker, args=(event_id,), daemon=True).start()
+
+    def _cluster_worker(self, event_id: str):
+        try:
+            payload, generated = cluster_event_if_needed(event_id)
+            self.root.after(0, self._show_clusters, payload, generated)
+        except FileNotFoundError:
+            self.root.after(
+                0,
+                self._show_cluster_error,
+                f"Event '{event_id}' must be indexed before it can be clustered.",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.root.after(0, self._show_cluster_error, f"Could not cluster this event: {exc}")
+
     # -- results rendering ------------------------------------------------------
 
     def _clear_results(self):
@@ -191,6 +221,10 @@ class PhotoMatchApp:
     def _show_error(self, message: str):
         self.status_var.set(message)
         self.search_button.config(state="normal")
+
+    def _show_cluster_error(self, message: str):
+        self.status_var.set(message)
+        self.cluster_button.config(state="normal")
 
     def _show_results(self, results: dict):
         confident = results["confident"]
@@ -210,6 +244,60 @@ class PhotoMatchApp:
                 self.results_frame,
                 text="No matches found in this event. Try a different selfie or event.",
                 padding=20,
+            ).pack()
+
+    def _show_clusters(self, payload: dict, generated: bool):
+        """Render saved candidate identity groups for staff review."""
+        clusters = payload["clusters"]
+        unclustered_count = payload.get("unclustered_count", 0)
+        action = "Created" if generated else "Loaded"
+        self.status_var.set(
+            f"{action} {len(clusters)} candidate group(s); "
+            f"{unclustered_count} face(s) remain unclustered."
+        )
+        self.cluster_button.config(state="normal")
+
+        ttk.Label(
+            self.results_frame,
+            text=f"Clustered People ({len(clusters)})",
+            font=("", 13, "bold"),
+        ).pack(anchor="w", pady=(10, 4))
+
+        if not clusters:
+            ttk.Label(
+                self.results_frame,
+                text=(
+                    "No candidate groups were found. Faces remain unclustered "
+                    "when the system is not confident they are the same person."
+                ),
+                padding=20,
+                wraplength=700,
+            ).pack(anchor="w")
+            return
+
+        grid = ttk.Frame(self.results_frame)
+        grid.pack(anchor="w")
+        for index, cluster in enumerate(clusters):
+            row, column = divmod(index, RESULTS_PER_ROW)
+            cell = ttk.Frame(grid, padding=6)
+            cell.grid(row=row, column=column, sticky="n")
+
+            representative = cluster["representative"]
+            thumbnail = self._load_thumbnail(representative["photo_path"])
+            if thumbnail is not None:
+                ttk.Label(cell, image=thumbnail).pack()
+                self._thumbnail_refs.append(thumbnail)
+            else:
+                ttk.Label(cell, text="Preview unavailable", width=20, anchor="center").pack()
+
+            members = cluster["members"]
+            photo_count = len({member["photo_path"] for member in members})
+            label = cluster["cluster_id"].replace("_", " ").title()
+            ttk.Label(cell, text=label).pack()
+            ttk.Label(cell, text=f"{len(members)} faces in {photo_count} photo(s)").pack()
+            ttk.Label(
+                cell,
+                text=f"Cohesion {cluster['mean_similarity_to_representative']:.2f}",
             ).pack()
 
     def _render_tier(self, title: str, matches: list):

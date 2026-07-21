@@ -60,6 +60,18 @@ EVENT_INDEXED_SUBDIR = "indexed"
 # raise it to a tested maximum of three for capable local hardware.
 DEFAULT_INDEX_WORKERS = 1
 MAX_INDEX_WORKERS = 3
+# ---------------------------------------------------------------------------
+# Auto-clustering (Issue #20)
+# ---------------------------------------------------------------------------
+# Clustering is intentionally conservative: uncertain faces are left
+# unclustered for staff review instead of being forced into a wrong identity.
+CLUSTER_NEIGHBORS = 50
+# Permit natural variation in pose, lighting, and distance while preserving a
+# stricter direct-link threshold than the cohesion check. These values are a
+# staff-review starting point, not automatic identity verification.
+CLUSTER_EDGE_SIMILARITY = 0.68
+CLUSTER_COHESION_SIMILARITY = 0.65
+CLUSTER_MIN_SIZE = 2
 
 
 def event_dir(event_id: str) -> Path:
