@@ -43,6 +43,7 @@ class StatusStore:
                     event_id TEXT PRIMARY KEY,
                     event_date TEXT NOT NULL,
                     display_name TEXT,
+                    fingerprint TEXT NOT NULL DEFAULT '',
                     status TEXT NOT NULL,
                     rebuild_required INTEGER NOT NULL DEFAULT 0,
                     pipeline_version TEXT NOT NULL DEFAULT '',
@@ -86,6 +87,8 @@ class StatusStore:
             }
             if "display_name" not in columns:
                 connection.execute("ALTER TABLE events ADD COLUMN display_name TEXT")
+            if "fingerprint" not in columns:
+                connection.execute("ALTER TABLE events ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''")
             connection.execute(
                 """
                 UPDATE events SET display_name = event_id
@@ -133,6 +136,14 @@ class StatusStore:
                 (event_id,),
             ).fetchone()
         return row["access_code"] if row else None
+
+    def get_fingerprint(self, event_id: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT fingerprint FROM events WHERE event_id = ?",
+                (event_id,),
+            ).fetchone()
+        return row["fingerprint"] if row else None
 
     def find_event_id_by_access_code(self, access_code: str) -> str | None:
         """Resolve a valid code without exposing the event catalog to the web layer."""
@@ -241,6 +252,76 @@ class StatusStore:
                 (event_id,),
             ).fetchall()
         return [self._image_from_row(row) for row in rows]
+
+    def upsert_event(
+        self,
+        event_id: str,
+        fingerprint: str,
+        status: IndexStatus,
+        total_images: int,
+        error: str | None = None,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO events(event_id, event_date, display_name, fingerprint, status, error)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(event_id) DO UPDATE SET
+                    fingerprint = excluded.fingerprint,
+                    status = excluded.status,
+                    error = excluded.error,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    event_id,
+                    "1970-01-01",
+                    event_id,
+                    fingerprint,
+                    status.value,
+                    error,
+                ),
+            )
+            self._ensure_event_access_code(connection, event_id)
+
+    def upsert_image(
+        self,
+        event_id: str,
+        photo_path: str,
+        fingerprint: str,
+        status: IndexStatus,
+        face_count: int = 0,
+        error: str | None = None,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO images(event_id, photo_path, fingerprint, status, face_count, error)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(event_id, photo_path) DO UPDATE SET
+                    fingerprint = excluded.fingerprint,
+                    status = excluded.status,
+                    face_count = excluded.face_count,
+                    error = excluded.error,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (event_id, photo_path, fingerprint, status.value, face_count, error),
+            )
+
+    def remove_missing_images(self, event_id: str, current_paths: set[str]) -> int:
+        with self._connect() as connection:
+            if not current_paths:
+                cursor = connection.execute(
+                    "DELETE FROM images WHERE event_id = ?",
+                    (event_id,),
+                )
+                return cursor.rowcount
+
+            placeholders = ",".join("?" for _ in current_paths)
+            cursor = connection.execute(
+                f"DELETE FROM images WHERE event_id = ? AND photo_path NOT IN ({placeholders})",
+                (event_id, *sorted(current_paths)),
+            )
+            return cursor.rowcount
 
     def get_image_map(self, event_id: str) -> dict[str, ImageIndexStatus]:
         return {image.photo_path: image for image in self.list_images(event_id)}

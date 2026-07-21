@@ -17,10 +17,10 @@ class IndexStatus(StrEnum):
 
 @dataclass(frozen=True)
 class ImageIndexStatus:
-    event_id: str
     photo_path: str
-    fingerprint: str
     status: IndexStatus
+    event_id: str = ""
+    fingerprint: str = ""
     face_count: int = 0
     error: str | None = None
     updated_at: str | None = None
@@ -29,17 +29,23 @@ class ImageIndexStatus:
 @dataclass(frozen=True)
 class EventSummary:
     event_id: str
-    event_date: str
     status: IndexStatus
-    rebuild_required: bool
-    total_images: int
-    indexed_images: int
-    no_face_images: int
-    failed_images: int
-    pending_images: int
+    event_date: str = ""
+    rebuild_required: bool = False
+    total_images: int = 0
+    indexed_images: int = 0
+    no_face_images: int = 0
+    failed_images: int = 0
+    pending_images: int = 0
     error: str | None = None
     updated_at: str | None = None
     display_name: str | None = None
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    confident: list
+    possible: list
 
 
 @dataclass(frozen=True)
