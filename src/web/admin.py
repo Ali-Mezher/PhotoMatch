@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hmac
+import math
 import secrets
 from collections import defaultdict
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from flask import (
     Blueprint,
@@ -26,13 +28,18 @@ from PIL import Image, ImageOps
 
 from config import EMBEDDING_MODEL, EVENT_RAW_SUBDIR, INDEX_PIPELINE_VERSION
 from src.indexing.build_index import active_index_generation
+from src.matching import EventNotIndexedError, NoFaceDetectedError
 from src.services.admin_store import RuntimeSettings
 from src.services.event_import import create_event, import_photos
 from src.services.models import IndexStatus
 
 from .access import EventAccessGate
+from .media import InvalidImageError, decode_selfie, render_watermarked_preview
+from .search_results import filter_matches, require_photo, require_search, result_store
 
 admin = Blueprint("admin", __name__, url_prefix="/admin")
+EVENT_PAGE_SIZES = (10, 25, 50, 100)
+DEFAULT_EVENT_PAGE_SIZE = 25
 
 
 def admin_required(view):
@@ -130,7 +137,25 @@ def logout():
 @admin_required
 def overview():
     indexing = _indexing()
-    events = indexing.list_events()
+    query = request.args.get("q", "").strip()[:100]
+    per_page = _query_integer("per_page", DEFAULT_EVENT_PAGE_SIZE)
+    if per_page not in EVENT_PAGE_SIZES:
+        per_page = DEFAULT_EVENT_PAGE_SIZE
+    page = max(1, _query_integer("page", 1))
+    events, matching_events = indexing.search_events(
+        query=query, limit=per_page, offset=(page - 1) * per_page
+    )
+    page_count = max(1, math.ceil(matching_events / per_page))
+    if page > page_count:
+        return redirect(
+            url_for(
+                "admin.overview",
+                q=query or None,
+                per_page=per_page,
+                page=page_count,
+            ),
+            code=303,
+        )
     clusters = {event.event_id: _admin_store().latest_cluster(event.event_id) for event in events}
     stale_clusters = {
         event.event_id: bool(
@@ -141,14 +166,6 @@ def overview():
         )
         for event in events
     }
-    totals = {
-        "events": len(events),
-        "photos": sum(event.total_images for event in events),
-        "ready": sum(event.status == IndexStatus.INDEXED for event in events),
-        "attention": sum(
-            event.status == IndexStatus.FAILED or event.failed_images > 0 for event in events
-        ),
-    }
     return render_template(
         "admin/overview.html",
         events=events,
@@ -158,8 +175,14 @@ def overview():
             event.event_id: indexing.get_event_access_code(event.event_id)
             for event in events
         },
-        totals=totals,
+        totals=indexing.event_catalog_totals(),
         audit=_admin_store().recent_audit(),
+        query=query,
+        page=page,
+        page_count=page_count,
+        per_page=per_page,
+        page_sizes=EVENT_PAGE_SIZES,
+        matching_events=matching_events,
     )
 
 
@@ -188,18 +211,135 @@ def create_event_route():
 @admin.get("/events/<event_id>")
 @admin_required
 def event_detail(event_id: str):
+    return _render_event_detail(event_id, search_token=request.args.get("search_token"))
+
+
+@admin.post("/events/<event_id>/search")
+@admin_required
+def search_person(event_id: str):
+    event = _get_event_or_404(event_id)
+    if not _event_is_searchable(event):
+        return _render_event_detail(
+            event_id,
+            search_error="Finish indexing this event before searching its photos.",
+            status=409,
+        )
+
+    upload = request.files.get("selfie")
+    if upload is None or not upload.filename:
+        return _render_event_detail(
+            event_id,
+            search_error="Choose a selfie image, then try the search again.",
+            status=400,
+        )
+
     try:
-        event = _indexing().get_event(event_id)
-    except (KeyError, ValueError):
-        abort(404)
-    return render_template(
-        "admin/event_detail.html",
-        event=event,
-        images=_indexing().list_image_statuses(event_id),
-        access_code=_indexing().get_event_access_code(event_id),
-        cluster=_admin_store().latest_cluster(event_id),
-        cluster_stale=_cluster_is_stale(event_id),
+        selfie = decode_selfie(upload)
+        raw_matches = current_app.config["MATCHER"](selfie, event_id)
+    except InvalidImageError as exc:
+        return _render_event_detail(event_id, search_error=str(exc), status=400)
+    except NoFaceDetectedError:
+        return _render_event_detail(
+            event_id,
+            search_error="No face was found. Use a clear, front-facing photo and try again.",
+            status=422,
+        )
+    except EventNotIndexedError:
+        return _render_event_detail(
+            event_id,
+            search_error="This event is no longer ready for search. Check its index status.",
+            status=409,
+        )
+    except Exception:  # noqa: BLE001 - keep internal details out of the operator UI
+        current_app.logger.exception("Admin photo matching failed")
+        return _render_event_detail(
+            event_id,
+            search_error="The search could not be completed. Check the index and try again.",
+            status=500,
+        )
+
+    safe_matches = filter_matches(event_id, raw_matches)
+    stored = result_store().create(event_id, safe_matches, audience="admin")
+    _admin_store().record_audit(
+        "person_search_completed", event_id, result_count=len(stored.photos)
     )
+    return redirect(
+        url_for("admin.event_detail", event_id=event_id, search_token=stored.token)
+        + "#person-search",
+        code=303,
+    )
+
+
+@admin.get("/events/<event_id>/search-results/<token>/preview/<photo_id>")
+@admin_required
+def search_preview(event_id: str, token: str, photo_id: str):
+    stored, photo = require_photo(token, photo_id, "admin")
+    if stored.event_id != event_id:
+        abort(404)
+    max_size = (1800, 1400) if request.args.get("size") == "full" else (720, 540)
+    try:
+        preview_bytes = render_watermarked_preview(photo.path, max_size)
+    except OSError:
+        abort(404)
+    response = send_file(preview_bytes, mimetype="image/jpeg")
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
+@admin.get("/events/<event_id>/search-results/<token>/download/<photo_id>")
+@admin_required
+def search_download(event_id: str, token: str, photo_id: str):
+    stored, photo = require_photo(token, photo_id, "admin")
+    if stored.event_id != event_id:
+        abort(404)
+    return send_file(
+        photo.path, as_attachment=True, download_name=photo.path.name, max_age=0
+    )
+
+
+@admin.post("/events/<event_id>/search-results/<token>/export")
+@admin_required
+def search_export(event_id: str, token: str):
+    stored = require_search(token, "admin")
+    if stored.event_id != event_id:
+        abort(404)
+    selected_ids = list(dict.fromkeys(request.form.getlist("photo_ids")))
+    if not selected_ids:
+        return _render_event_detail(
+            event_id,
+            search=stored,
+            search_error="Select at least 1 photo before downloading a ZIP.",
+            status=400,
+        )
+
+    selected = []
+    for photo_id in selected_ids:
+        _, photo = require_photo(token, photo_id, "admin")
+        selected.append(photo)
+
+    archive = BytesIO()
+    with ZipFile(archive, "w", compression=ZIP_DEFLATED) as zip_file:
+        for photo in selected:
+            zip_file.write(photo.path, arcname=photo.path.name)
+    archive.seek(0)
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"photomatch-{event_id}.zip",
+    )
+
+
+@admin.errorhandler(413)
+def admin_upload_too_large(_error):
+    event_id = (request.view_args or {}).get("event_id")
+    if request.endpoint == "admin.search_person" and event_id:
+        return _render_event_detail(
+            event_id,
+            search_error="That selfie is too large. Choose an image smaller than 12 MB.",
+            status=413,
+        )
+    return "Upload too large.", 413
 
 
 @admin.post("/events/<event_id>/photos")
@@ -247,6 +387,21 @@ def index_event(event_id: str):
     _admin_store().record_audit("index_requested", event_id, queued=queued)
     flash("Indexing request queued." if queued else "The event index is already current.", "success")
     return redirect(url_for("admin.event_detail", event_id=event_id), code=303)
+
+
+@admin.get("/events/<event_id>/index-progress")
+@admin_required
+def index_progress(event_id: str):
+    try:
+        progress = _indexing().get_index_progress(event_id)
+    except (KeyError, ValueError):
+        abort(404)
+    return jsonify(
+        status=progress.status.value,
+        completed=progress.completed,
+        total=progress.total,
+        percent=progress.percent,
+    )
 
 
 @admin.post("/events/<event_id>/retry")
@@ -419,6 +574,60 @@ def _coordinator():
 
 def _admin_store():
     return current_app.extensions["admin_store"]
+
+
+def _query_integer(name: str, default: int) -> int:
+    try:
+        return int(request.args.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_event_or_404(event_id: str):
+    try:
+        return _indexing().get_event(event_id)
+    except (KeyError, ValueError):
+        abort(404)
+
+
+def _event_is_searchable(event) -> bool:
+    return (
+        event.status == IndexStatus.INDEXED
+        and not event.pending_images
+        and not event.failed_images
+    )
+
+
+def _render_event_detail(
+    event_id: str,
+    search_token: str | None = None,
+    search=None,
+    search_error: str | None = None,
+    status: int = 200,
+):
+    event = _get_event_or_404(event_id)
+    index_progress = _indexing().get_index_progress(event_id)
+    if search is None and search_token:
+        search = result_store().get(search_token)
+        if search is None:
+            search_error = "That search has expired. Submit the selfie again."
+        elif search.audience != "admin" or search.event_id != event_id:
+            abort(404)
+    return (
+        render_template(
+            "admin/event_detail.html",
+            event=event,
+            images=_indexing().list_image_statuses(event_id),
+            access_code=_indexing().get_event_access_code(event_id),
+            cluster=_admin_store().latest_cluster(event_id),
+            cluster_stale=_cluster_is_stale(event_id),
+            search=search,
+            search_error=search_error,
+            search_ready=_event_is_searchable(event),
+            index_progress=index_progress,
+        ),
+        status,
+    )
 
 
 def _cluster_is_stale(event_id: str) -> bool:

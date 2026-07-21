@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "components/selfie_picker.html" import search_submit, selfie_picker %}
 {% block title %}{{ event.display_name or event.event_id }}{% endblock %}
 {% block content %}
 <header class="page-header split-header">
@@ -10,7 +11,7 @@
 </section>
 <div class="two-column">
   <section class="form-panel upload-panel">
-    <div class="section-heading"><div><h2>Add photos</h2><p>JPG or PNG · 50 MB per photo · 20 photos per upload batch.</p></div></div>
+    <div class="section-heading"><div><h2>Add photos</h2><p>JPG or PNG · 50 MB per photo · Select any number; uploads are sent in safe batches.</p></div></div>
     <form action="{{ url_for('admin.upload_photos', event_id=event.event_id) }}" method="post" enctype="multipart/form-data" data-batch-upload>
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <label class="drop-zone" for="event-photos"><strong>Choose photos or drop them here</strong><span data-upload-copy>Multiple files are supported.</span><input id="event-photos" type="file" name="photos" accept="image/jpeg,image/png" multiple required></label>
@@ -21,6 +22,10 @@
   <section class="form-panel operations-panel">
     <div class="section-heading"><div><h2>Processing</h2><p>Indexing and clustering run one at a time.</p></div><span class="status status-{{ event.status.value }}">{{ event.status.value|replace('_', ' ') }}</span></div>
     {% if event.error %}<div class="notice notice-error">{{ event.error }}</div>{% endif %}
+    <div class="index-progress" data-index-progress data-active="{{ 'true' if event.status.value in ['queued', 'indexing'] else 'false' }}" data-url="{{ url_for('admin.index_progress', event_id=event.event_id) }}" {% if event.status.value not in ['queued', 'indexing'] %}hidden{% endif %}>
+      <div><span data-progress-label>{{ 'Waiting' if event.status.value == 'queued' else 'Indexing' }}</span><strong data-progress-percent>{{ index_progress.percent }}%</strong></div>
+      <progress data-progress-bar value="{{ index_progress.percent }}" max="100" aria-label="Indexing progress">{{ index_progress.percent }}%</progress>
+    </div>
     <dl class="detail-list"><div><dt>Pending images</dt><dd>{{ event.pending_images }}</dd></div><div><dt>Cluster result</dt><dd>{% if cluster %}<a href="{{ url_for('admin.cluster_review', event_id=event.event_id, run_id=cluster.run_id) }}">{{ 'Stale — run again' if cluster_stale else cluster.status|capitalize }}</a>{% else %}Not run{% endif %}</dd></div></dl>
     <div class="operation-actions">
       <form action="{{ url_for('admin.index_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Check and index</button></form>
@@ -29,6 +34,24 @@
     </div>
   </section>
 </div>
+<div class="workflow-divider" aria-hidden="true"></div>
+<section class="section-block person-search" id="person-search">
+  <header class="person-search-heading">
+    <div><p class="eyebrow">Person lookup</p><h2>Search for a person</h2><p>Use a clear selfie to search only this event’s indexed photos.</p></div>
+    <dl class="search-scope">
+      <div><dt>Search scope</dt><dd>{{ event.indexed_images }} searchable photo{% if event.indexed_images != 1 %}s{% endif %}</dd></div>
+      <div><dt>Access</dt><dd>No attendee code required</dd></div>
+    </dl>
+  </header>
+  {% if search_error %}<div class="notice notice-error" role="alert">{{ search_error }}</div>{% endif %}
+  {% if not search_ready %}<div class="notice notice-warning">Finish indexing this event before searching its photos.</div>{% endif %}
+  <form class="admin-selfie-form" action="{{ url_for('admin.search_person', event_id=event.event_id) }}" method="post" enctype="multipart/form-data" data-search-form>
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    {{ selfie_picker(disabled=not search_ready) }}
+    {{ search_submit('Search This Event', disabled=not search_ready) }}
+  </form>
+  {% if search %}{% include "admin/search_results.html" %}{% endif %}
+</section>
 <section class="section-block">
   <div class="section-heading"><div><h2>Photo inventory</h2><p>Each source image is tracked independently, so new additions do not reindex completed photos.</p></div></div>
   <div class="table-wrap"><table><thead><tr><th>Filename</th><th>Status</th><th>Faces</th><th>Updated</th><th>Issue</th></tr></thead><tbody>

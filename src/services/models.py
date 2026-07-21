@@ -51,6 +51,22 @@ class ImageIndexOutcome:
 
 
 @dataclass(frozen=True)
+class IndexProgress:
+    event_id: str
+    status: IndexStatus
+    completed: int
+    total: int
+
+    @property
+    def percent(self) -> int:
+        if self.status is IndexStatus.INDEXED:
+            return 100
+        if self.total <= 0:
+            return 0
+        return min(100, int(self.completed * 100 / self.total))
+
+
+@dataclass(frozen=True)
 class SearchResult:
     """Interface-neutral wrapper around the two public match tiers."""
 

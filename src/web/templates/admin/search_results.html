@@ -1,0 +1,44 @@
+<div class="admin-search-results">
+  <div class="section-heading search-result-heading">
+    <div><h2>Search results</h2><p>{{ search.photos|length }} matching photo{% if search.photos|length != 1 %}s{% endif %}. Previews are watermarked; downloads are original files.</p></div>
+  </div>
+  {% if search.photos %}
+  <form action="{{ url_for('admin.search_export', event_id=event.event_id, token=search.token) }}" method="post" data-selection-form>
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    {% for tier, photos, heading in [('confident', search.confident, 'Confident matches'), ('possible', search.possible, 'Possible matches')] %}
+      {% if photos %}
+      <section class="admin-result-tier" aria-labelledby="admin-{{ tier }}-heading">
+        <div class="tier-heading"><h3 id="admin-{{ tier }}-heading">{{ heading }}</h3><span>{{ photos|length }}</span></div>
+        <div class="admin-photo-grid">
+          {% for photo in photos %}
+          <article class="admin-photo-card">
+            <button class="admin-preview-button" type="button"
+              data-preview-url="{{ url_for('admin.search_preview', event_id=event.event_id, token=search.token, photo_id=photo.photo_id, size='full') }}"
+              data-preview-name="Photo {{ loop.index }}"
+              aria-label="Open protected full-size preview">
+              <img src="{{ url_for('admin.search_preview', event_id=event.event_id, token=search.token, photo_id=photo.photo_id) }}" alt="Protected {{ tier }} match preview" width="720" height="540" loading="lazy">
+            </button>
+            <div class="admin-photo-meta">
+              <label><input type="checkbox" name="photo_ids" value="{{ photo.photo_id }}"><span>Select photo</span></label>
+              <span>{{ '%.0f'|format(photo.score * 100) }}% match</span>
+            </div>
+            <a class="row-action" href="{{ url_for('admin.search_download', event_id=event.event_id, token=search.token, photo_id=photo.photo_id) }}">Download original</a>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+    {% endfor %}
+    <div class="admin-export-bar">
+      <strong data-selection-count aria-live="polite">0 photos selected</strong>
+      <button class="button button-primary" type="submit" disabled data-export-button>Download ZIP</button>
+    </div>
+  </form>
+  <dialog class="admin-preview-dialog" data-preview-dialog aria-labelledby="admin-preview-title">
+    <div class="dialog-header"><h2 id="admin-preview-title" data-preview-title>Protected preview</h2><button type="button" class="dialog-close" data-preview-close aria-label="Close preview">×</button></div>
+    <div class="admin-dialog-media"><img data-preview-image alt="" width="1800" height="1400"></div>
+  </dialog>
+  {% else %}
+  <div class="empty-state compact-empty"><h3>No matches found</h3><p>Try another clear, front-facing selfie.</p></div>
+  {% endif %}
+</div>
