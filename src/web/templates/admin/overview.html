@@ -1,0 +1,44 @@
+{% extends "admin/base.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<header class="page-header split-header">
+  <div><p class="eyebrow">Local operations</p><h1>Events</h1><p>Review photo readiness, event codes, and cluster runs.</p></div>
+  <a class="button button-primary" href="{{ url_for('admin.new_event') }}">Create event</a>
+</header>
+<section class="summary-strip" aria-label="Event summary">
+  <div><strong>{{ totals.events }}</strong><span>Events</span></div>
+  <div><strong>{{ totals.photos }}</strong><span>Photos tracked</span></div>
+  <div><strong>{{ totals.ready }}</strong><span>Ready</span></div>
+  <div><strong>{{ totals.attention }}</strong><span>Need attention</span></div>
+</section>
+<section class="section-block">
+  <div class="section-heading"><div><h2>Event inventory</h2><p>Oldest events appear first.</p></div></div>
+  {% if events %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Event</th><th>Date</th><th>Index</th><th>Photos</th><th>Cluster</th><th>Access code</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+        {% for event in events %}
+        {% set cluster = clusters[event.event_id] %}
+        <tr>
+          <td data-label="Event"><a class="table-title" href="{{ url_for('admin.event_detail', event_id=event.event_id) }}">{{ event.display_name or event.event_id }}</a><small>{{ event.event_id }}</small></td>
+          <td data-label="Date">{{ event.event_date }}</td>
+          <td data-label="Index"><span class="status status-{{ event.status.value }}">{{ event.status.value|replace('_', ' ') }}</span>{% if event.pending_images %}<small>{{ event.pending_images }} pending</small>{% endif %}</td>
+          <td data-label="Photos">{{ event.indexed_images }} / {{ event.total_images }}<small>{{ event.no_face_images }} no face · {{ event.failed_images }} failed</small></td>
+          <td data-label="Cluster">{% if cluster %}<a href="{{ url_for('admin.cluster_review', event_id=event.event_id, run_id=cluster.run_id) }}">{{ 'Stale' if stale_clusters[event.event_id] else cluster.status|capitalize }}</a><small>{% if cluster.status == 'complete' %}{{ cluster.cluster_count }} groups{% endif %}</small>{% else %}<span class="muted">Not run</span>{% endif %}</td>
+          <td data-label="Access code"><code>{{ access_codes[event.event_id] }}</code></td>
+          <td><a class="row-action" href="{{ url_for('admin.event_detail', event_id=event.event_id) }}">Manage →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty-state"><h3>No events yet</h3><p>Create an event, then import its event photos.</p><a class="button" href="{{ url_for('admin.new_event') }}">Create first event</a></div>{% endif %}
+</section>
+<section class="section-block audit-block">
+  <div class="section-heading"><div><h2>Recent activity</h2><p>Security and operational actions recorded on this device.</p></div></div>
+  <ol class="activity-list">
+    {% for item in audit %}<li><span>{{ item.action|replace('_', ' ') }}</span><small>{{ item.event_id or 'Console' }} · {{ item.created_at }}</small></li>{% else %}<li class="muted">No activity recorded yet.</li>{% endfor %}
+  </ol>
+</section>
+{% endblock %}

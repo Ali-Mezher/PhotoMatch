@@ -34,7 +34,7 @@ data/evaluation/grad2026/identities/
 
 1. **One event = one folder**, named to match the event's `event_id`
    under `data/events/<event_id>/`. That event must already be indexed
-   (`python scripts/demo_index_and_search.py index <event_id>`) before
+   (`python scripts/demo_goated_index_and_search.py index <event_id>`) before
    you can evaluate it.
 2. **One folder per person** under `identities/`, named however you
    like (a first name is fine).

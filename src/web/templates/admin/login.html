@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Operator sign in · PhotoMatch</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+  </head>
+  <body class="login-body">
+    <main class="login-shell">
+      <a class="admin-brand" href="{{ url_for('home') }}"><span class="brand-mark"></span>PhotoMatch</a>
+      <section class="login-panel">
+        <p class="eyebrow">Operator console</p>
+        <h1>Sign in</h1>
+        <p class="muted">Manage local events, indexing, matching settings, and identity groups.</p>
+        {% if error %}<div class="notice notice-error" role="alert">{{ error }}</div>{% endif %}
+        {% if not configured %}
+          <div class="notice notice-warning" role="alert">Admin credentials are not configured. Set <code>PHOTOMATCH_ADMIN_USERNAME</code> and <code>PHOTOMATCH_ADMIN_PASSWORD</code>, then restart the app.</div>
+        {% endif %}
+        <form method="post" action="{{ url_for('admin.login_submit') }}" class="stack-form">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+          <label>Username<input name="username" autocomplete="username" required {% if not configured %}disabled{% endif %}></label>
+          <label>Password<input type="password" name="password" autocomplete="current-password" required {% if not configured %}disabled{% endif %}></label>
+          <button class="button button-primary" type="submit" {% if not configured %}disabled{% endif %}>Sign in</button>
+        </form>
+      </section>
+      <p class="login-note">This console is intended for the local operator only.</p>
+    </main>
+  </body>
+</html>
