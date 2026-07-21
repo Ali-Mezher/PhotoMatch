@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -35,6 +36,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 ACTIVE_INDEX_FILENAME = "active.json"
 GENERATIONS_DIRNAME = "generations"
 _GENERATION_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+ProgressCallback = Callable[[Path, str, int, str | None], None]
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,7 @@ def _process_photos(
     index: EventIndex,
     photo_paths: list[Path],
     show_progress: bool,
+    progress_callback: ProgressCallback | None = None,
 ) -> list[IndexBuildOutcome]:
     iterator = (
         tqdm(photo_paths, desc="Indexing photos") if show_progress else photo_paths
@@ -141,20 +144,28 @@ def _process_photos(
     for photo_path in iterator:
         image = cv2.imread(str(photo_path))
         if image is None:
-            outcomes.append(
-                IndexBuildOutcome(photo_path, "failed", error="could not read image")
+            outcome = IndexBuildOutcome(
+                photo_path, "failed", error="could not read image"
             )
+            outcomes.append(outcome)
+            if progress_callback:
+                progress_callback(photo_path, "failed", 0, outcome.error)
             continue
 
         try:
             cleaned = preprocess_image(image)
             faces = detect_and_embed(cleaned)
         except Exception as exc:  # noqa: BLE001 - isolate one corrupt source image
-            outcomes.append(IndexBuildOutcome(photo_path, "failed", error=str(exc)))
+            outcome = IndexBuildOutcome(photo_path, "failed", error=str(exc))
+            outcomes.append(outcome)
+            if progress_callback:
+                progress_callback(photo_path, "failed", 0, outcome.error)
             continue
 
         if not faces:
             outcomes.append(IndexBuildOutcome(photo_path, "no_face"))
+            if progress_callback:
+                progress_callback(photo_path, "no_face", 0, None)
             continue
 
         index.add(
@@ -169,6 +180,8 @@ def _process_photos(
             ],
         )
         outcomes.append(IndexBuildOutcome(photo_path, "indexed", len(faces)))
+        if progress_callback:
+            progress_callback(photo_path, "indexed", len(faces), None)
 
     return outcomes
 
@@ -179,6 +192,7 @@ def update_event_index(
     *,
     rebuild: bool = False,
     show_progress: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> tuple[EventIndex, list[IndexBuildOutcome]]:
     """Append selected photos or atomically rebuild an event's whole index."""
     output_dir = event_dir(event_id) / EVENT_INDEXED_SUBDIR
@@ -187,12 +201,21 @@ def update_event_index(
     else:
         index = EventIndex.load(_active_index_dir(output_dir))
 
-    outcomes = _process_photos(index, [Path(path) for path in photo_paths], show_progress)
+    outcomes = _process_photos(
+        index,
+        [Path(path) for path in photo_paths],
+        show_progress,
+        progress_callback,
+    )
     _publish_index(index, output_dir)
     return index, outcomes
 
 
-def build_event_index(event_id: str, show_progress: bool = True) -> EventIndex:
+def build_event_index(
+    event_id: str,
+    show_progress: bool = True,
+    progress_callback: ProgressCallback | None = None,
+) -> EventIndex:
     """
     Index every photo in data/events/<event_id>/raw/ and save the result
     to data/events/<event_id>/indexed/.
@@ -233,7 +256,11 @@ def build_event_index(event_id: str, show_progress: bool = True) -> EventIndex:
         )
 
     index, outcomes = update_event_index(
-        event_id, photo_paths, rebuild=True, show_progress=show_progress
+        event_id,
+        photo_paths,
+        rebuild=True,
+        show_progress=show_progress,
+        progress_callback=progress_callback,
     )
     failed = [outcome for outcome in outcomes if outcome.status == "failed"]
     output_dir = event_dir(event_id) / EVENT_INDEXED_SUBDIR

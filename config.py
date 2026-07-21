@@ -56,6 +56,18 @@ POSSIBLE_MATCH_THRESHOLD = 0.50
 EVENT_RAW_SUBDIR = "raw"
 EVENT_INDEXED_SUBDIR = "indexed"
 
+# The production worker deliberately runs one resource-heavy indexing or
+# clustering job at a time. This constant remains public for service-layer
+# callers introduced by issue #23.
+DEFAULT_INDEX_WORKERS = 1
+
+# Conservative candidate-clustering defaults used by the legacy desktop
+# review tool. The Flask dashboard stores its DBSCAN settings in SQLite.
+CLUSTER_NEIGHBORS = 50
+CLUSTER_EDGE_SIMILARITY = 0.68
+CLUSTER_COHESION_SIMILARITY = 0.65
+CLUSTER_MIN_SIZE = 2
+
 # Increment this whenever preprocessing, detection, or embedding behavior
 # changes in a way that makes existing vectors stale. The indexing service
 # will rebuild affected events before serving the new generation.

@@ -209,3 +209,45 @@ def test_existing_event_schema_migrates_display_names_without_data_loss(tmp_path
     assert event is not None
     assert event.display_name == "legacy-event"
     assert event.status.value == "indexed"
+
+
+def test_issue_23_service_schema_migrates_and_accepts_new_events(tmp_path):
+    database = tmp_path / "issue23.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE events (
+                event_id TEXT PRIMARY KEY,
+                fingerprint TEXT NOT NULL,
+                status TEXT NOT NULL,
+                total_images INTEGER NOT NULL DEFAULT 0,
+                error TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE images (
+                event_id TEXT NOT NULL,
+                photo_path TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                status TEXT NOT NULL,
+                face_count INTEGER NOT NULL DEFAULT 0,
+                error TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(event_id, photo_path)
+            );
+            INSERT INTO events(event_id, fingerprint, status, total_images)
+            VALUES ('legacy-event', 'fingerprint', 'indexed', 1);
+            INSERT INTO images(
+                event_id, photo_path, fingerprint, status, face_count
+            ) VALUES ('legacy-event', 'legacy.jpg', 'photo-fingerprint', 'indexed', 2);
+            """
+        )
+
+    store = StatusStore(database)
+    legacy = store.get_event("legacy-event")
+    store.register_event("new-event", "2026-07-22", "New Event")
+
+    assert legacy is not None
+    assert legacy.display_name == "legacy-event"
+    assert legacy.indexed_images == 1
+    assert store.list_images("legacy-event")[0].face_count == 2
+    assert store.get_event("new-event").display_name == "New Event"

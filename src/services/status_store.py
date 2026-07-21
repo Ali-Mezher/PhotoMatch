@@ -37,6 +37,12 @@ class StatusStore:
 
     def _initialize(self) -> None:
         with self._connect() as connection:
+            existing_event_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(events)").fetchall()
+            }
+            if existing_event_columns and "event_date" not in existing_event_columns:
+                self._migrate_issue_23_events(connection)
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -86,6 +92,15 @@ class StatusStore:
             }
             if "display_name" not in columns:
                 connection.execute("ALTER TABLE events ADD COLUMN display_name TEXT")
+            image_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(images)").fetchall()
+            }
+            if "created_at" not in image_columns:
+                connection.execute("ALTER TABLE images ADD COLUMN created_at TEXT")
+                connection.execute(
+                    "UPDATE images SET created_at = COALESCE(updated_at, CURRENT_TIMESTAMP)"
+                )
             connection.execute(
                 """
                 UPDATE events SET display_name = event_id
@@ -95,6 +110,45 @@ class StatusStore:
             event_ids = connection.execute("SELECT event_id FROM events").fetchall()
             for row in event_ids:
                 self._ensure_event_access_code(connection, row["event_id"])
+
+    @staticmethod
+    def _migrate_issue_23_events(connection: sqlite3.Connection) -> None:
+        """Upgrade the pre-dev issue #23 event table without losing image state."""
+        connection.executescript(
+            """
+            ALTER TABLE events RENAME TO events_issue_23_legacy;
+
+            CREATE TABLE events (
+                event_id TEXT PRIMARY KEY,
+                event_date TEXT NOT NULL,
+                display_name TEXT,
+                status TEXT NOT NULL,
+                rebuild_required INTEGER NOT NULL DEFAULT 0,
+                pipeline_version TEXT NOT NULL DEFAULT '',
+                error TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            INSERT INTO events(
+                event_id, event_date, display_name, status, rebuild_required,
+                pipeline_version, error, created_at, updated_at
+            )
+            SELECT
+                event_id,
+                COALESCE(substr(updated_at, 1, 10), '1970-01-01'),
+                event_id,
+                status,
+                0,
+                '',
+                error,
+                COALESCE(updated_at, CURRENT_TIMESTAMP),
+                COALESCE(updated_at, CURRENT_TIMESTAMP)
+            FROM events_issue_23_legacy;
+
+            DROP TABLE events_issue_23_legacy;
+            """
+        )
 
     def register_event(
         self, event_id: str, event_date: str, display_name: str | None = None
@@ -482,13 +536,19 @@ class StatusStore:
             connection.execute(
                 """
                 UPDATE events SET status = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE status IN (?, ?, ?)
+                WHERE status IN (?, ?)
+                   OR (
+                       status = ?
+                       AND EXISTS (
+                           SELECT 1 FROM images i WHERE i.event_id = events.event_id
+                       )
+                   )
                 """,
                 (
                     IndexStatus.QUEUED.value,
-                    IndexStatus.PENDING.value,
                     IndexStatus.QUEUED.value,
                     IndexStatus.INDEXING.value,
+                    IndexStatus.PENDING.value,
                 ),
             )
             connection.execute(
