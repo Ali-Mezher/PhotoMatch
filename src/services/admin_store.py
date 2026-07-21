@@ -205,10 +205,21 @@ class AdminStore:
             )
 
     def recent_audit(self, limit: int = 20) -> list[sqlite3.Row]:
+        return self.audit_page(limit=limit, offset=0)
+
+    def audit_page(self, limit: int, offset: int = 0) -> list[sqlite3.Row]:
+        if limit <= 0 or offset < 0:
+            raise ValueError("audit pagination values are invalid")
         with self._connect() as connection:
             return connection.execute(
-                "SELECT * FROM audit_log ORDER BY audit_id DESC LIMIT ?", (limit,)
+                "SELECT * FROM audit_log ORDER BY audit_id DESC LIMIT ? OFFSET ?",
+                (limit, offset),
             ).fetchall()
+
+    def audit_count(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute("SELECT COUNT(*) AS total FROM audit_log").fetchone()
+        return int(row["total"])
 
     def queue_cluster(
         self, event_id: str, similarity: float, min_cluster_size: int

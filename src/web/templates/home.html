@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "components/selfie_picker.html" import search_submit, selfie_picker %}
+{% from "components/selfie_picker.html" import search_submit %}
+{% from "components/liveness_picker.html" import liveness_picker %}
 {% block title %}Find Your Event Photos · PhotoMatch{% endblock %}
 
 {% block content %}
@@ -8,13 +9,13 @@
     <p class="eyebrow">Private, on-device search</p>
     <h1>Find the photos you’re in.</h1>
     <p class="lead">
-      Enter the code from your event, then provide 1 clear selfie. PhotoMatch
+      Enter the code from your event, then complete a quick live selfie check. PhotoMatch
       compares it only with that event’s local photo index.
     </p>
 
     <ol class="process-list" aria-label="Search steps">
       <li><span>01</span><strong>Enter event code</strong></li>
-      <li><span>02</span><strong>Consent & provide selfie</strong></li>
+      <li><span>02</span><strong>Consent & verify live selfie</strong></li>
       <li><span>03</span><strong>Review & download</strong></li>
     </ol>
 
@@ -34,7 +35,7 @@
   >
     <div class="form-heading">
       <span class="step-count">Step 2 of 2</span>
-      <h2>Provide Your Selfie</h2>
+      <h2>Verify Your Live Selfie</h2>
     </div>
 
     {% if error %}
@@ -54,9 +55,9 @@
     <div class="privacy-notice">
       <h3>Before You Continue</h3>
       <p>
-        PhotoMatch uses your selfie to search this event’s photos on this local
-        computer. Your selfie is processed in memory for this search and is not
-        saved. Its face embedding is also kept only in memory.
+        PhotoMatch uses 3 temporary camera frames to confirm a live selfie and
+        search this event’s photos on this local computer. The frames and face
+        embeddings are processed in memory for this search and are not saved.
       </p>
       <label class="consent-control">
         <input type="checkbox" name="consent" value="yes" required>
@@ -65,11 +66,11 @@
     </div>
 
     <div class="field-group">
-      <span class="field-label">Selfie image</span>
-      {{ selfie_picker() }}
+      <span class="field-label">Live selfie</span>
+      {{ liveness_picker(liveness_challenge) }}
     </div>
 
-    {{ search_submit('Search This Event', wide=true) }}
+    {{ search_submit('Search This Event', wide=true, disabled=true) }}
   </form>
   {% else %}
   <form class="search-form access-form" action="{{ url_for('event_access') }}" method="post">

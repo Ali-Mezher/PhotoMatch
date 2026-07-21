@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import math
 import secrets
 from collections import defaultdict
@@ -40,6 +41,8 @@ from .search_results import filter_matches, require_photo, require_search, resul
 admin = Blueprint("admin", __name__, url_prefix="/admin")
 EVENT_PAGE_SIZES = (10, 25, 50, 100)
 DEFAULT_EVENT_PAGE_SIZE = 25
+AUDIT_PAGE_SIZES = (25, 50, 100)
+DEFAULT_AUDIT_PAGE_SIZE = 25
 
 
 def admin_required(view):
@@ -176,13 +179,41 @@ def overview():
             for event in events
         },
         totals=indexing.event_catalog_totals(),
-        audit=_admin_store().recent_audit(),
+        audit=_audit_entries(_admin_store().recent_audit(limit=5)),
+        audit_total=_admin_store().audit_count(),
         query=query,
         page=page,
         page_count=page_count,
         per_page=per_page,
         page_sizes=EVENT_PAGE_SIZES,
         matching_events=matching_events,
+    )
+
+
+@admin.get("/activity")
+@admin_required
+def activity():
+    per_page = _query_integer("per_page", DEFAULT_AUDIT_PAGE_SIZE)
+    if per_page not in AUDIT_PAGE_SIZES:
+        per_page = DEFAULT_AUDIT_PAGE_SIZE
+    page = max(1, _query_integer("page", 1))
+    total = _admin_store().audit_count()
+    page_count = max(1, math.ceil(total / per_page))
+    if page > page_count:
+        return redirect(
+            url_for("admin.activity", per_page=per_page, page=page_count), code=303
+        )
+    entries = _audit_entries(
+        _admin_store().audit_page(per_page, offset=(page - 1) * per_page)
+    )
+    return render_template(
+        "admin/activity.html",
+        audit=entries,
+        total=total,
+        page=page,
+        page_count=page_count,
+        per_page=per_page,
+        page_sizes=AUDIT_PAGE_SIZES,
     )
 
 
@@ -562,6 +593,34 @@ def reset_settings():
 
 def _indexing():
     return current_app.extensions["indexing_service"]
+
+
+def _audit_entries(rows):
+    entries = []
+    for row in rows:
+        try:
+            details = json.loads(row["details"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            details = {}
+        summary = " · ".join(
+            f"{key.replace('_', ' ')}: {_audit_value(value)}"
+            for key, value in details.items()
+        )
+        entries.append(
+            {
+                "action": row["action"].replace("_", " ").title(),
+                "event_id": row["event_id"],
+                "details": summary,
+                "created_at": row["created_at"],
+            }
+        )
+    return entries
+
+
+def _audit_value(value):
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    return value
 
 
 def _clustering():
