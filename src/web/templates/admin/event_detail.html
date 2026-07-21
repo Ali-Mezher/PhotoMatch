@@ -58,4 +58,13 @@
     {% for image in images %}<tr><td data-label="Filename"><strong>{{ image.photo_path|basename }}</strong></td><td data-label="Status"><span class="status status-{{ image.status.value }}">{{ image.status.value|replace('_', ' ') }}</span></td><td data-label="Faces">{{ image.face_count }}</td><td data-label="Updated">{{ image.updated_at or '—' }}</td><td data-label="Issue">{{ image.error or '—' }}</td></tr>{% else %}<tr><td colspan="5" class="empty-cell">No photos imported yet.</td></tr>{% endfor %}
   </tbody></table></div>
 </section>
+<section class="section-block danger-zone">
+  <div class="section-heading"><div><p class="eyebrow">Danger zone</p><h2>Delete event</h2><p>Permanently removes this event, its original photos, face index, attendee code, and clustering results.</p></div></div>
+  {% if delete_error %}<div class="notice notice-error" role="alert">{{ delete_error }}</div>{% endif %}
+  <form action="{{ url_for('admin.delete_event', event_id=event.event_id) }}" method="post" class="delete-event-form">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <label>Enter <code>{{ event.event_id }}</code> to confirm<input name="confirmation" autocomplete="off" required></label>
+    <button class="button button-danger" type="submit">Delete event permanently</button>
+  </form>
+</section>
 {% endblock %}
