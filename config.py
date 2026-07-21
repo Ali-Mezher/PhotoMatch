@@ -6,6 +6,7 @@ its own values — this is what keeps preprocessing, detection, indexing,
 and matching compatible with each other across the team.
 """
 
+import re
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -55,27 +56,43 @@ POSSIBLE_MATCH_THRESHOLD = 0.50
 EVENT_RAW_SUBDIR = "raw"
 EVENT_INDEXED_SUBDIR = "indexed"
 
-# Background indexing is resource-heavy because it loads face-detection and
-# embedding models. Keep the safe default at one worker; service callers may
-# raise it to a tested maximum of three for capable local hardware.
+# The production worker deliberately runs one resource-heavy indexing or
+# clustering job at a time. This constant remains public for service-layer
+# callers introduced by issue #23.
 DEFAULT_INDEX_WORKERS = 1
-MAX_INDEX_WORKERS = 3
-# ---------------------------------------------------------------------------
-# Auto-clustering (Issue #20)
-# ---------------------------------------------------------------------------
-# Clustering is intentionally conservative: uncertain faces are left
-# unclustered for staff review instead of being forced into a wrong identity.
+
+# Conservative candidate-clustering defaults used by the legacy desktop
+# review tool. The Flask dashboard stores its DBSCAN settings in SQLite.
 CLUSTER_NEIGHBORS = 50
-# Permit natural variation in pose, lighting, and distance while preserving a
-# stricter direct-link threshold than the cohesion check. These values are a
-# staff-review starting point, not automatic identity verification.
 CLUSTER_EDGE_SIMILARITY = 0.68
 CLUSTER_COHESION_SIMILARITY = 0.65
 CLUSTER_MIN_SIZE = 2
 
+# Increment this whenever preprocessing, detection, or embedding behavior
+# changes in a way that makes existing vectors stale. The indexing service
+# will rebuild affected events before serving the new generation.
+INDEX_PIPELINE_VERSION = "1"
+
+INDEX_STATUS_DB = DATA_DIR / "indexing_status.sqlite3"
+
+_EVENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def validate_event_id(event_id: str) -> str:
+    """Return a safe event ID or raise before it reaches filesystem paths."""
+    if not isinstance(event_id, str) or not _EVENT_ID_PATTERN.fullmatch(event_id):
+        raise ValueError(
+            "event_id must be 1-128 characters using only letters, numbers, "
+            "dots, underscores, and hyphens"
+        )
+    if event_id in {".", ".."}:
+        raise ValueError("event_id cannot be '.' or '..'")
+    return event_id
+
 
 def event_dir(event_id: str) -> Path:
     """Return the data directory for a given event_id, creating it if needed."""
+    event_id = validate_event_id(event_id)
     d = EVENTS_DIR / event_id
     d.mkdir(parents=True, exist_ok=True)
     return d

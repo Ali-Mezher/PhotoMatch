@@ -1,11 +1,11 @@
-"""Framework-independent models used by PhotoMatch application services."""
+"""Data models shared by indexing services and future application layers."""
 
 from dataclasses import dataclass
 from enum import StrEnum
 
 
 class IndexStatus(StrEnum):
-    """Lifecycle states for an event or one source image."""
+    """Lifecycle states used for events and source images."""
 
     PENDING = "pending"
     QUEUED = "queued"
@@ -17,7 +17,9 @@ class IndexStatus(StrEnum):
 
 @dataclass(frozen=True)
 class ImageIndexStatus:
+    event_id: str
     photo_path: str
+    fingerprint: str
     status: IndexStatus
     face_count: int = 0
     error: str | None = None
@@ -27,16 +29,30 @@ class ImageIndexStatus:
 @dataclass(frozen=True)
 class EventSummary:
     event_id: str
+    event_date: str
     status: IndexStatus
+    rebuild_required: bool
     total_images: int
     indexed_images: int
     no_face_images: int
     failed_images: int
+    pending_images: int
+    error: str | None = None
     updated_at: str | None = None
+    display_name: str | None = None
+
+
+@dataclass(frozen=True)
+class ImageIndexOutcome:
+    photo_path: str
+    status: IndexStatus
+    face_count: int = 0
     error: str | None = None
 
 
 @dataclass(frozen=True)
 class SearchResult:
+    """Interface-neutral wrapper around the two public match tiers."""
+
     confident: list
     possible: list

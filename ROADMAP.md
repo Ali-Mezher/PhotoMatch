@@ -23,7 +23,7 @@
 ## Week 3 — Indexing, Matching & Interface
 | Issue | Task | Ownership | Status | Notes |
 |-------|------|-----------|--------|-------|
-| [#8](https://github.com/Ali-Mezher/PhotoMatch/issues/8) | Indexing: build per-event FAISS vector index | Ali Mezher & Mahmood Tendail | ✅ Done | Builds, saves, loads, and queries an isolated FAISS index per event; covered by an end-to-end integration test. |
+| [#8](https://github.com/Ali-Mezher/PhotoMatch/issues/8) | Indexing: build per-event FAISS vector index | Ali Mezher & Mahmood Tendail | ✅ Done | Builds, saves, loads, and queries an isolated FAISS index per event. SQLite-backed per-image status now enables incremental additions, ordered background jobs, and safe rebuilds for changed/deleted sources. Use `scripts/demo_goated_index_and_search.py`; pass `--force` only for a complete rebuild. |
 | [#9](https://github.com/Ali-Mezher/PhotoMatch/issues/9) | Matching: cosine similarity search & confidence-tiered results | Ali Mezher & Mahmood Tendail | ✅ Done | Selfie embeddings are searched against one event's FAISS index, deduplicated by photo, and returned in confidence tiers; final threshold tuning remains in issue #10. |
 | [#10](https://github.com/Ali-Mezher/PhotoMatch/issues/10) | Matching: threshold tuning (FAR vs FRR trade-off) | Ali Mezher & Nourallah Mourad | ✅ Done | Tested FAR/FRR tuner recommends confident and possible thresholds from labeled genuine/impostor scores; collect a representative dataset before changing production values. |
 | [#11](https://github.com/Ali-Mezher/PhotoMatch/issues/11) | Interface: selfie upload & results display UI | Nourallah Mourad & Mahmood Tendail | ✅ Done | Selfie validation and preview, background matching, confidence-tiered results, responsive thumbnails, and pipeline error handling are implemented and covered by integration-focused tests. |
@@ -43,18 +43,18 @@
 ## Week 5 — Deployment Readiness & Final Report
 | Issue | Task | Ownership | Status | Notes |
 |-------|------|-----------|--------|-------|
-| #18 | Privacy: consent, secure biometric storage & retention/deletion policy | Nourallah Mourad | ✅ Done | `docs/PRIVACY_AND_RETENTION.md` defines affirmative and guardian consent, separate evaluation consent, local encrypted storage and least-privilege access, exact retention limits, verified deletion, and incident response. |
-| #19 | Report & presentation: final write-up | — | ⬜ Not started | Incorporate the completed evaluation, validation, privacy, and deployment-readiness results. |
+| #18 | Privacy: consent, secure biometric storage & retention/deletion policy | Nourallah Mourad & Malek Alkashat | ✅ Done | `docs/PRIVACY_AND_RETENTION.md` defines affirmative and guardian consent, separate evaluation consent, local encrypted storage and least-privilege access, exact retention limits, verified deletion, and incident response. |
+| #19 | Report & presentation: final write-up | Nourallah Mourad | ✅ Draft complete | `docs/FINAL_REPORT.md` and `docs/PRESENTATION_OUTLINE.md` integrate the implemented pipeline, verification, evaluation protocol, deployment, privacy, limitations, demo flow, and speaking notes. Real-event metric fields remain explicitly pending consented data. |
 
 ---
 
 ## Post-Core — Stretch Goals
 | Issue | Task | Ownership | Status | Notes |
 |-------|------|-----------|--------|-------|
-| #20 | Interface: auto-clustering of similar faces *(stretch goal)* | Malek AlKashat | 🟨 Implemented — pending review/merge | Builds conservative, event-scoped candidate identity clusters from mutual FAISS neighbors; uncertain faces remain unclustered. Saves a local `clusters.json` artifact and provides `scripts/cluster_event.py` for staff review preparation. |
+| #20 | Interface: auto-clustering of similar faces *(stretch goal)* | Malek AlKashat | ✅ Done | The desktop review tool produces conservative mutual-neighbor candidate groups, while the operator dashboard persists DBSCAN runs, reviewable groups, unclustered faces, optional labels, and stale-generation state. |
 | #21 | Security: liveness / anti-spoofing *(stretch goal)* | — | ⬜ Not started | Add and evaluate a basic blink, motion, or texture-based check to reduce searches using another person's photograph. |
-| #22 | Interface: watermarked previews & admin dashboard *(stretch goal)* | — | ⬜ Not started | Show protected previews and give staff indexing status, failed-job retry, and manual review controls. |
-| #23 | Indexing: automatic event queue & service foundation | Malek AlKashat | 🟨 Implemented — pending review/merge | Adds a framework-independent `PhotoMatchService`, local per-event/per-image SQLite status tracking, stale-event auto-queueing, and a bounded indexing scheduler (default 1, tunable up to 3 workers). Tkinter now uses the service layer; the future Flask interface will reuse it. 133 tests pass. |
+| #22 | Interface: watermarked previews & admin dashboard *(stretch goal)* | — | ✅ Done | The attendee web flow uses protected previews and original-only exports. The authenticated local operator dashboard creates events, safely imports photos, exposes access codes and per-image status, coordinates indexing, supports retries, and controls validated runtime settings. |
+| #23 | Indexing: automatic event queue & service foundation | Malek AlKashat | ✅ Done | A shared service facade now routes desktop and Flask workflows through the per-image SQLite index state, immutable generations, one interrupt-driven worker, startup reconciliation, oldest-first ordering, and incremental additions without full-event reprocessing. |
 
 ---
 

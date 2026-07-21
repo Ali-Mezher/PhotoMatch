@@ -21,9 +21,9 @@ from tkinter import filedialog, messagebox, ttk
 import cv2
 from PIL import Image, ImageOps, ImageTk
 
-from config import EVENTS_DIR
 from src.clustering import cluster_event_if_needed
-from src.matching import match_selfie, NoFaceDetectedError, EventNotIndexedError
+from src.matching import NoFaceDetectedError, EventNotIndexedError
+from src.services import PhotoMatchService
 
 THUMBNAIL_SIZE = (160, 160)
 SELFIE_PREVIEW_SIZE = (96, 96)
