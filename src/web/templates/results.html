@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Your Matches · PhotoMatch{% endblock %}
+
+{% block content %}
+<section class="results-shell">
+  <div class="results-header">
+    <div>
+      <a class="back-link" href="{{ url_for('home') }}">← New Search</a>
+      <p class="eyebrow">{{ search.event_id }}</p>
+      <h1>Your Photo Matches</h1>
+      <p class="lead compact">
+        {{ search.photos|length }} matching photo{% if search.photos|length != 1 %}s{% endif %}
+        found. Preview images are watermarked; downloads are the original files.
+      </p>
+    </div>
+    <div class="result-key" aria-label="Confidence key">
+      <span><i class="key-dot confident-dot"></i> Confident</span>
+      <span><i class="key-dot possible-dot"></i> Possible</span>
+    </div>
+  </div>
+
+  {% if error %}
+    <div class="alert alert-error" role="alert" aria-live="assertive">{{ error }}</div>
+  {% endif %}
+
+  {% if search.photos %}
+  <form action="{{ url_for('export', token=search.token) }}" method="post" data-selection-form>
+    {% for tier, photos, heading, description in [
+      ('confident', search.confident, 'Confident Matches', 'Strong similarity to your selfie.'),
+      ('possible', search.possible, 'Possible Matches', 'Review these carefully before downloading.')
+    ] %}
+      {% if photos %}
+      <section class="result-tier" aria-labelledby="{{ tier }}-heading">
+        <div class="tier-heading">
+          <div>
+            <h2 id="{{ tier }}-heading">{{ heading }}</h2>
+            <p>{{ description }}</p>
+          </div>
+          <span class="tier-count">{{ photos|length }}</span>
+        </div>
+
+        <div class="photo-grid">
+          {% for photo in photos %}
+          <article class="photo-card" data-photo-card>
+            <button
+              class="preview-button"
+              type="button"
+              data-preview-url="{{ url_for('preview', token=search.token, photo_id=photo.photo_id, size='full') }}"
+              data-preview-name="Photo {{ loop.index }}"
+              aria-label="Open protected full-size preview"
+            >
+              <img
+                src="{{ url_for('preview', token=search.token, photo_id=photo.photo_id) }}"
+                alt="Protected {{ tier }} match preview"
+                width="720"
+                height="540"
+                loading="lazy"
+              >
+            </button>
+            <div class="photo-meta">
+              <label class="select-control">
+                <input type="checkbox" name="photo_ids" value="{{ photo.photo_id }}">
+                <span>Select Photo</span>
+              </label>
+              <span class="confidence-score">{{ '%.0f'|format(photo.score * 100) }}% match</span>
+            </div>
+            <a
+              class="download-link"
+              href="{{ url_for('download', token=search.token, photo_id=photo.photo_id) }}"
+            >Download Original</a>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+    {% endfor %}
+
+    <div class="export-bar" data-export-bar>
+      <div aria-live="polite" role="status">
+        <strong data-selection-count>0 photos selected</strong>
+        <span>Select any number of photos.</span>
+      </div>
+      <button class="button button-primary" type="submit" disabled data-export-button>
+        Download ZIP
+      </button>
+    </div>
+  </form>
+  {% else %}
+    <div class="empty-state">
+      <span class="empty-frame" aria-hidden="true"></span>
+      <h2>No Matches Found</h2>
+      <p>Try a clearer selfie or ask staff for manual photo lookup.</p>
+      <a class="button button-secondary" href="{{ url_for('home') }}">Try Another Selfie</a>
+    </div>
+  {% endif %}
+</section>
+
+<dialog class="preview-dialog" data-preview-dialog aria-labelledby="preview-title">
+  <div class="dialog-header">
+    <h2 id="preview-title" data-preview-title>Protected Preview</h2>
+    <button type="button" class="dialog-close" data-preview-close aria-label="Close preview">×</button>
+  </div>
+  <div class="dialog-media">
+    <img data-preview-image alt="" width="1800" height="1400">
+  </div>
+  <p>Preview only · The downloaded file will not include this watermark.</p>
+</dialog>
+{% endblock %}

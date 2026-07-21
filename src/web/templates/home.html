@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Find Your Event Photos · PhotoMatch{% endblock %}
+
+{% block content %}
+<section class="search-shell">
+  <div class="intro-column">
+    <p class="eyebrow">Private, on-device search</p>
+    <h1>Find the photos you’re in.</h1>
+    <p class="lead">
+      Enter the code from your event, then provide 1 clear selfie. PhotoMatch
+      compares it only with that event’s local photo index.
+    </p>
+
+    <ol class="process-list" aria-label="Search steps">
+      <li><span>01</span><strong>Enter event code</strong></li>
+      <li><span>02</span><strong>Consent & provide selfie</strong></li>
+      <li><span>03</span><strong>Review & download</strong></li>
+    </ol>
+
+    <div class="manual-option">
+      <strong>Prefer not to use face search?</strong>
+      <p>Ask staff for manual photo lookup. You can use the event service without submitting a selfie.</p>
+    </div>
+  </div>
+
+  {% if unlocked_event %}
+  <form
+    class="search-form"
+    action="{{ url_for('search', access_token=access_token) }}"
+    method="post"
+    enctype="multipart/form-data"
+  >
+    <div class="form-heading">
+      <span class="step-count">Step 2 of 2</span>
+      <h2>Provide Your Selfie</h2>
+    </div>
+
+    {% if error %}
+      <div class="alert alert-error" role="alert" aria-live="assertive">{{ error }}</div>
+    {% endif %}
+
+    <div class="field-group event-confirmation-group">
+      <span class="field-label">Event</span>
+      <div class="event-confirmation">
+        <span class="ready-indicator" aria-hidden="true"></span>
+        <strong>{{ unlocked_event.display_name or unlocked_event.event_id }}</strong>
+        <span>Ready</span>
+      </div>
+      <a class="change-event-link" href="{{ url_for('home') }}">Use a Different Code</a>
+    </div>
+
+    <div class="privacy-notice">
+      <h3>Before You Continue</h3>
+      <p>
+        PhotoMatch uses your selfie to search this event’s photos on this local
+        computer. Your selfie is processed in memory for this search and is not
+        saved. Its face embedding is also kept only in memory.
+      </p>
+      <label class="consent-control">
+        <input type="checkbox" name="consent" value="yes" required>
+        <span>I understand and consent to this biometric search.</span>
+      </label>
+    </div>
+
+    <div class="field-group">
+      <span class="field-label">Selfie image</span>
+      <div class="selfie-inputs">
+        <label class="upload-zone" for="selfie">
+          <span class="upload-symbol" aria-hidden="true">↑</span>
+          <span class="upload-copy">
+            <strong>Choose a clear selfie</strong>
+            <small data-file-name>JPG, PNG, WebP, or BMP · Maximum 12 MB</small>
+          </span>
+          <input
+            id="selfie"
+            name="selfie"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/bmp"
+            capture="user"
+            required
+          >
+        </label>
+        <button class="camera-action" type="button" data-camera-open>
+          <span class="camera-action-mark" aria-hidden="true"></span>
+          <span><strong>Use Camera</strong><small>Take a selfie on this device</small></span>
+        </button>
+      </div>
+      <p class="field-help" data-camera-support aria-live="polite"></p>
+    </div>
+
+    <button class="button button-primary button-wide" type="submit">
+      Search This Event
+    </button>
+  </form>
+  {% else %}
+  <form class="search-form access-form" action="{{ url_for('event_access') }}" method="post">
+    <div class="form-heading">
+      <span class="step-count">Step 1 of 2</span>
+      <h2>Enter Event Code</h2>
+    </div>
+
+    {% if error %}
+      <div class="alert alert-error" role="alert" aria-live="assertive">{{ error }}</div>
+    {% endif %}
+
+    <div class="field-group">
+      <label for="event_code">Event code</label>
+      <input
+        class="event-code-input"
+        id="event_code"
+        name="event_code"
+        type="text"
+        value="{{ entered_code }}"
+        placeholder="A1B2C3D4"
+        minlength="8"
+        maxlength="9"
+        inputmode="text"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+        aria-describedby="event-code-help"
+        required
+        data-event-code
+      >
+      <p class="field-help" id="event-code-help">
+        Enter the 8-character code provided by event staff. You can type or paste it.
+      </p>
+    </div>
+
+    <div class="code-privacy-note">
+      <strong>Events are not listed publicly.</strong>
+      <p>A valid code opens only its matching event.</p>
+    </div>
+
+    <button class="button button-primary button-wide" type="submit">
+      Find Event
+    </button>
+  </form>
+  {% endif %}
+</section>
+
+{% if unlocked_event %}
+<dialog class="camera-dialog" data-camera-dialog aria-labelledby="camera-title">
+  <div class="dialog-header">
+    <h2 id="camera-title">Take a Selfie</h2>
+    <button type="button" class="dialog-close" data-camera-close aria-label="Close camera">×</button>
+  </div>
+  <div class="camera-media">
+    <video data-camera-video autoplay muted playsinline></video>
+    <canvas data-camera-canvas hidden></canvas>
+  </div>
+  <div class="camera-controls">
+    <p data-camera-status role="status" aria-live="polite">Camera permission is required.</p>
+    <div>
+      <button class="button button-secondary" type="button" data-camera-cancel>Cancel</button>
+      <button class="button button-primary" type="button" data-camera-capture disabled>Take Photo</button>
+    </div>
+  </div>
+</dialog>
+{% endif %}
+{% endblock %}
