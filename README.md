@@ -106,6 +106,9 @@ indexing and clustering; it never scans on a timer. Set
 Debug mode is off by default and can be explicitly enabled for local development with
 `PHOTOMATCH_DEBUG=1`.
 
+See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for every supported environment
+variable, its default, and standard local, paused-worker, debug, and HTTPS examples.
+
 ## Running the tests
 
 ```bash
