@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from zipfile import ZipFile
 
@@ -123,6 +124,19 @@ def test_home_hides_event_catalog_and_unlocks_only_the_matching_event(web_setup)
     assert b"I understand and consent" in search_form.data
     assert b"Use Camera" in search_form.data
     assert b'capture="user"' in search_form.data
+    assert b'data-selfie-upload' in search_form.data
+    assert b'aria-pressed="false"' in search_form.data
+
+
+def test_selfie_picker_uses_exclusive_selected_source_states():
+    script = (Path(__file__).parents[1] / "src" / "web" / "static" / "selfie-picker.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'source === "upload"' in script
+    assert 'source === "camera"' in script
+    assert 'pendingSource = "camera"' in script
+    assert 'classList.toggle("is-selected"' in script
 
 
 def test_invalid_unready_and_expired_event_access_are_actionable(web_setup):

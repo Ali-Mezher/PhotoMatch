@@ -53,7 +53,7 @@
 |-------|------|-----------|--------|-------|
 | #20 | Interface: auto-clustering of similar faces *(stretch goal)* | Malek AlKashat | ✅ Done | The desktop review tool produces conservative mutual-neighbor candidate groups, while the operator dashboard persists DBSCAN runs, reviewable groups, unclustered faces, optional labels, and stale-generation state. |
 | #21 | Security: liveness / anti-spoofing *(stretch goal)* | — | ⬜ Not started | Add and evaluate a basic blink, motion, or texture-based check to reduce searches using another person's photograph. |
-| #22 | Interface: watermarked previews & admin dashboard *(stretch goal)* | — | ✅ Done | The attendee web flow uses protected previews and original-only exports. The authenticated local operator dashboard creates events, safely imports photos, exposes access codes and per-image status, coordinates indexing, supports retries, and controls validated runtime settings. |
+| #22 | Interface: watermarked previews & admin dashboard *(stretch goal)* | — | ✅ Done | The attendee web flow uses protected previews and original-only exports. The authenticated local operator dashboard creates events, safely imports photos, exposes access codes and per-image status, coordinates indexing, supports retries, controls validated runtime settings, searches people directly within an event, and provides searchable paginated event inventory. |
 | #23 | Indexing: automatic event queue & service foundation | Malek AlKashat | ✅ Done | A shared service facade now routes desktop and Flask workflows through the per-image SQLite index state, immutable generations, one interrupt-driven worker, startup reconciliation, oldest-first ordering, and incremental additions without full-event reprocessing. |
 
 ---

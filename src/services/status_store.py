@@ -254,6 +254,77 @@ class StatusStore:
             ).fetchall()
         return [self._event_from_row(row) for row in rows]
 
+    def search_events(
+        self, query: str = "", limit: int = 25, offset: int = 0
+    ) -> tuple[list[EventSummary], int]:
+        """Return one filtered event page and the full filtered count."""
+        if limit <= 0 or offset < 0:
+            raise ValueError("limit must be positive and offset cannot be negative")
+
+        where_sql, parameters = self._event_search_filter(query)
+        with self._connect() as connection:
+            total = connection.execute(
+                f"""
+                SELECT COUNT(*) AS total
+                FROM events e
+                LEFT JOIN event_access_codes a ON a.event_id = e.event_id
+                {where_sql}
+                """,
+                parameters,
+            ).fetchone()["total"]
+            rows = connection.execute(
+                self._event_summary_query(where_sql)
+                + " ORDER BY e.event_date, e.event_id LIMIT ? OFFSET ?",
+                (*parameters, limit, offset),
+            ).fetchall()
+        return [self._event_from_row(row) for row in rows], total
+
+    def event_catalog_totals(self) -> dict[str, int]:
+        """Return unfiltered overview totals without materializing every event."""
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    COUNT(*) AS events,
+                    COALESCE(SUM(CASE WHEN e.status = 'indexed' THEN 1 ELSE 0 END), 0) AS ready,
+                    COALESCE(SUM(
+                        CASE WHEN e.status = 'failed' OR EXISTS (
+                            SELECT 1 FROM images failed
+                            WHERE failed.event_id = e.event_id
+                              AND failed.status = 'failed'
+                        ) THEN 1 ELSE 0 END
+                    ), 0) AS attention,
+                    (SELECT COUNT(*) FROM images) AS photos
+                FROM events e
+                """
+            ).fetchone()
+        return {key: int(row[key] or 0) for key in ("events", "photos", "ready", "attention")}
+
+    @staticmethod
+    def _event_search_filter(query: str) -> tuple[str, tuple[str, ...]]:
+        query = query.strip()
+        if not query:
+            return "", ()
+
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        contains = f"%{escaped}%"
+        conditions = [
+            "COALESCE(e.display_name, e.event_id) LIKE ? ESCAPE '\\' COLLATE NOCASE",
+            "e.event_id LIKE ? ESCAPE '\\' COLLATE NOCASE",
+            "e.event_date LIKE ? ESCAPE '\\'",
+        ]
+        parameters = [contains, contains, contains]
+
+        compact_code = normalize_event_access_code(query)
+        code_like = compact_code and all(
+            character in _HEX_CHARACTERS or character in " -" for character in query.upper()
+        )
+        if code_like:
+            conditions.append("a.access_code LIKE ?")
+            parameters.append(f"%{compact_code}%")
+
+        return "WHERE " + " OR ".join(conditions), tuple(parameters)
+
     @staticmethod
     def _event_summary_query(suffix: str) -> str:
         return f"""
@@ -267,6 +338,7 @@ class StatusStore:
                             THEN 1 ELSE 0 END) AS pending_images
             FROM events e
             LEFT JOIN images i ON i.event_id = e.event_id
+            LEFT JOIN event_access_codes a ON a.event_id = e.event_id
             {suffix}
             GROUP BY e.event_id
         """
