@@ -63,6 +63,20 @@ INDEX_PIPELINE_VERSION = "1"
 
 INDEX_STATUS_DB = DATA_DIR / "indexing_status.sqlite3"
 
+# Background indexing is resource-heavy because it loads face-detection and
+# embedding models. Keep the safe default at one worker; service callers may
+# raise it to a tested maximum of three for capable local hardware.
+DEFAULT_INDEX_WORKERS = 1
+MAX_INDEX_WORKERS = 3
+
+# ---------------------------------------------------------------------------
+# Auto-clustering defaults
+# ---------------------------------------------------------------------------
+CLUSTER_NEIGHBORS = 50
+CLUSTER_EDGE_SIMILARITY = 0.68
+CLUSTER_COHESION_SIMILARITY = 0.65
+CLUSTER_MIN_SIZE = 2
+
 _EVENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
