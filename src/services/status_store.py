@@ -265,6 +265,36 @@ class StatusStore:
             ).fetchone()
         return self._event_from_row(row) if row else None
 
+    def delete_event_if_idle(self, event_id: str) -> None:
+        """Atomically remove an event unless background work is using it."""
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT status FROM events WHERE event_id = ?", (event_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(event_id)
+            if row["status"] == IndexStatus.INDEXING.value:
+                raise RuntimeError("Wait for active indexing to stop before deleting this event.")
+
+            has_cluster_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cluster_runs'"
+            ).fetchone()
+            if has_cluster_table:
+                active_cluster = connection.execute(
+                    "SELECT 1 FROM cluster_runs WHERE event_id = ? AND status = 'running'",
+                    (event_id,),
+                ).fetchone()
+                if active_cluster:
+                    raise RuntimeError(
+                        "Wait for active clustering to stop before deleting this event."
+                    )
+                connection.execute(
+                    "DELETE FROM cluster_runs WHERE event_id = ?", (event_id,)
+                )
+
+            connection.execute("DELETE FROM events WHERE event_id = ?", (event_id,))
+
     def list_events(self) -> list[EventSummary]:
         with self._connect() as connection:
             rows = connection.execute(

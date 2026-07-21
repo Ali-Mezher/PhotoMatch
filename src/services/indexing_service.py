@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import shutil
 from datetime import date
 from pathlib import Path
 
@@ -198,6 +199,16 @@ class IndexingService:
         if access_code is None:
             raise RuntimeError(f"Event '{event_id}' has no access code")
         return access_code
+
+    def delete_event(self, event_id: str) -> None:
+        """Delete an idle event's catalog state and local files."""
+        event_id = self._require_registered_event(event_id)
+        event_root = (self.events_dir / event_id).resolve()
+        if event_root.parent != self.events_dir:
+            raise ValueError("event_id resolves outside the configured events directory")
+        self.store.delete_event_if_idle(event_id)
+        if event_root.exists():
+            shutil.rmtree(event_root)
 
     def list_image_statuses(self, event_id: str) -> list[ImageIndexStatus]:
         event_id = self._require_registered_event(event_id)
