@@ -18,6 +18,8 @@ from config import EVENT_RAW_SUBDIR
 from .indexing_service import IMAGE_EXTENSIONS, IndexingService
 
 MAX_PHOTO_BYTES = 50 * 1024 * 1024
+JPEG_FORMATS = {"JPEG", "MPO"}
+ALLOWED_IMAGE_FORMATS = JPEG_FORMATS | {"PNG"}
 
 
 @dataclass(frozen=True)
@@ -93,12 +95,14 @@ def import_photos(raw_dir: Path, files: list[FileStorage]) -> list[ImportOutcome
             try:
                 with Image.open(temporary) as image:
                     image.verify()
-                    if image.format not in {"JPEG", "PNG"}:
+                    image_format = image.format
+                    if image_format not in ALLOWED_IMAGE_FORMATS:
                         raise ValueError("File contents are not JPG or PNG.")
                     if (
-                        image.format == "JPEG" and destination.suffix.lower() == ".png"
+                        image_format in JPEG_FORMATS
+                        and destination.suffix.lower() == ".png"
                     ) or (
-                        image.format == "PNG"
+                        image_format == "PNG"
                         and destination.suffix.lower() in {".jpg", ".jpeg"}
                     ):
                         raise ValueError("The filename extension does not match the image contents.")
