@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import re
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +19,7 @@ from src.services.status_store import (
 )
 from src.web import PublicEvent, create_app
 from src.web.access import EventAccessGate
+from src.web.liveness import LivenessChallengeStore, LivenessVerificationError
 from src.web.result_store import SearchResultStore
 
 
@@ -56,6 +58,16 @@ def web_setup(tmp_path):
         PublicEvent("conference", "2026-07-02", False, "pending"),
     ]
     event_codes = {READY_CODE: "graduation", PENDING_CODE: "conference"}
+
+    class PassthroughLivenessVerifier:
+        def __init__(self):
+            self.calls = []
+
+        def verify(self, front, turn, returned, direction):
+            self.calls.append((front, turn, returned, direction))
+            return returned
+
+    liveness = PassthroughLivenessVerifier()
     app = create_app(
         {
             "TESTING": True,
@@ -67,6 +79,10 @@ def web_setup(tmp_path):
                 normalize_event_access_code(code)
             ),
             "EVENT_ACCESS_GATE": EventAccessGate(ttl_seconds=900),
+            "LIVENESS_CHALLENGE_STORE": LivenessChallengeStore(
+                ttl_seconds=120, direction_provider=lambda: "raw_left"
+            ),
+            "LIVENESS_VERIFIER": liveness,
             "MATCHER": matcher,
             "RESULT_STORE": SearchResultStore(ttl_seconds=900),
         }
@@ -81,9 +97,15 @@ def _unlock(client, event_code=READY_CODE):
 def _search(client, **overrides):
     unlocked = _unlock(client)
     assert unlocked.status_code == 303
+    form = client.get(unlocked.headers["Location"])
+    token_match = re.search(rb'name="liveness_token" value="([^"]+)"', form.data)
+    assert token_match is not None
     data = {
         "consent": "yes",
-        "selfie": (_image_bytes(), "selfie.jpg"),
+        "liveness_token": token_match.group(1).decode(),
+        "liveness_front": (_image_bytes(), "front.jpg"),
+        "liveness_turn": (_image_bytes(), "turn.jpg"),
+        "liveness_return": (_image_bytes(), "return.jpg"),
     }
     data.update(overrides)
     return client.post(
@@ -122,9 +144,9 @@ def test_home_hides_event_catalog_and_unlocks_only_the_matching_event(web_setup)
     assert b"graduation" in search_form.data
     assert b"conference" not in search_form.data
     assert b"I understand and consent" in search_form.data
-    assert b"Use Camera" in search_form.data
-    assert b'capture="user"' in search_form.data
-    assert b'data-selfie-upload' in search_form.data
+    assert b"Start Live Selfie Check" in search_form.data
+    assert b'data-liveness-picker' in search_form.data
+    assert b'data-selfie-upload' not in search_form.data
     assert b'aria-pressed="false"' in search_form.data
     assert b'data-search-form' in search_form.data
     assert b"Hang tight" in search_form.data
@@ -189,7 +211,7 @@ def test_event_code_failures_are_throttled_and_recover_after_window(web_setup):
     assert _unlock(client, READY_CODE).status_code == 303
 
 
-def test_search_requires_an_unlock_token_consent_and_selfie(web_setup):
+def test_search_requires_an_unlock_token_consent_and_live_sequence(web_setup):
     _, client, calls, _, _ = web_setup
 
     direct = client.post(
@@ -198,15 +220,17 @@ def test_search_requires_an_unlock_token_consent_and_selfie(web_setup):
     )
     missing_consent = _search(client, consent="")
     unlocked = _unlock(client)
-    missing_selfie = client.post(
+    form = client.get(unlocked.headers["Location"])
+    token = re.search(rb'name="liveness_token" value="([^"]+)"', form.data).group(1)
+    missing_sequence = client.post(
         f'{unlocked.headers["Location"]}/search',
-        data={"consent": "yes"},
+        data={"consent": "yes", "liveness_token": token.decode()},
         content_type="multipart/form-data",
     )
 
     assert direct.status_code == 410
     assert missing_consent.status_code == 400
-    assert missing_selfie.status_code == 400
+    assert missing_sequence.status_code == 400
     assert calls == []
 
 
@@ -232,7 +256,9 @@ def test_valid_search_decodes_in_memory_and_uses_opaque_result_urls(web_setup):
 
 def test_invalid_image_and_no_face_errors_are_actionable(web_setup):
     app, client, _, _, _ = web_setup
-    invalid = _search(client, selfie=(BytesIO(b"not an image"), "selfie.jpg"))
+    invalid = _search(
+        client, liveness_front=(BytesIO(b"not an image"), "front.jpg")
+    )
     app.config["MATCHER"] = lambda image, event_id: (_ for _ in ()).throw(
         NoFaceDetectedError()
     )
@@ -243,6 +269,21 @@ def test_invalid_image_and_no_face_errors_are_actionable(web_setup):
     assert no_face.status_code == 422
     assert b"No face was found" in no_face.data
     assert b"manual photo lookup" in no_face.data
+
+
+def test_liveness_failure_does_not_call_matcher(web_setup):
+    app, client, calls, _, _ = web_setup
+
+    class RejectingVerifier:
+        def verify(self, *_args):
+            raise LivenessVerificationError("Turn toward the arrow and retry.")
+
+    app.config["LIVENESS_VERIFIER"] = RejectingVerifier()
+    response = _search(client)
+
+    assert response.status_code == 422
+    assert b"Turn toward the arrow" in response.data
+    assert calls == []
 
 
 def test_matching_failure_and_empty_results_have_recovery_paths(web_setup):
@@ -463,5 +504,5 @@ def test_oversized_upload_is_rejected_before_matching(web_setup):
     response = _search(client)
 
     assert response.status_code == 413
-    assert b"smaller than 12 MB" in response.data
+    assert b"live-selfie capture was too large" in response.data
     assert calls == []

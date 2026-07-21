@@ -95,6 +95,54 @@ def test_admin_rejects_bad_credentials_and_missing_csrf(tmp_path):
     assert response.status_code == 401
 
 
+def test_overview_shows_five_recent_rows_and_activity_log_is_paginated(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    store = app.extensions["admin_store"]
+    for index in range(60):
+        store.record_audit(
+            f"fixture_action_{index:02d}",
+            "event-fixture",
+            sequence=index,
+        )
+
+    overview = client.get("/admin/")
+    first_page = client.get("/admin/activity?per_page=25&page=1")
+    second_page = client.get("/admin/activity?per_page=25&page=2")
+
+    assert overview.status_code == 200
+    assert overview.data.count(b'class="activity-action"') == 5
+    assert b"Fixture Action 59" in overview.data
+    assert b"Fixture Action 54" not in overview.data
+    assert b"View All" in overview.data
+
+    assert first_page.status_code == 200
+    assert first_page.data.count(b'data-label="Action"') == 25
+    assert b"Rows per page" in first_page.data
+    assert b"Fixture Action 59" in first_page.data
+    assert b"sequence: 59" in first_page.data
+    assert b"Page 1 of 3" in first_page.data
+
+    assert second_page.status_code == 200
+    assert second_page.data.count(b'data-label="Action"') == 25
+    assert b"Page 2 of 3" in second_page.data
+
+
+def test_activity_log_normalizes_page_size_and_redirects_overflow_page(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+
+    invalid_size = client.get("/admin/activity?per_page=20")
+    overflow = client.get("/admin/activity?per_page=25&page=99")
+
+    assert invalid_size.status_code == 200
+    assert b'<option value="25" selected>' in invalid_size.data
+    assert overflow.status_code == 303
+    assert "page=1" in overflow.location
+
+
 def test_event_creation_generates_slug_code_and_display_name(tmp_path):
     app = _app(tmp_path)
     client = app.test_client()

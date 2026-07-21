@@ -1052,6 +1052,171 @@ input[type="checkbox"] {
   text-align: center;
 }
 
+.liveness-frame-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.liveness-launch {
+  width: 100%;
+  min-height: 112px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.liveness-launch:hover,
+.liveness-launch:focus-visible {
+  background: var(--action-soft);
+  border-color: var(--action);
+}
+
+.liveness-launch:disabled {
+  color: var(--ink-subtle);
+  background: var(--surface-muted);
+  cursor: not-allowed;
+}
+
+.liveness-launch > span:last-child,
+.liveness-launch strong,
+.liveness-launch small {
+  display: block;
+}
+
+.liveness-launch small {
+  margin-top: 3px;
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+}
+
+.liveness-picker.is-complete .liveness-launch {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: var(--success);
+  border-style: solid;
+}
+
+.liveness-dialog .dialog-header {
+  min-height: 68px;
+}
+
+.liveness-dialog .dialog-header h2 {
+  margin: 1px 0 0;
+}
+
+.dialog-step {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.liveness-progress {
+  margin: 0;
+  padding: 12px 18px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  list-style: none;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.liveness-progress li {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--ink-subtle);
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.liveness-progress span {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-size: 0.68rem;
+}
+
+.liveness-progress .is-current {
+  color: var(--action);
+}
+
+.liveness-progress .is-current span {
+  color: #fff;
+  background: var(--action);
+  border-color: var(--action);
+}
+
+.liveness-progress .is-complete {
+  color: var(--success);
+}
+
+.liveness-progress .is-complete span {
+  color: #fff;
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.liveness-media {
+  position: relative;
+}
+
+.liveness-guide {
+  width: min(44%, 270px);
+  aspect-ratio: 0.78;
+  position: absolute;
+  inset: 50% auto auto 50%;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 48%;
+  box-shadow: 0 0 0 999px rgba(4, 10, 14, 0.18);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.liveness-arrow {
+  width: 68px;
+  height: 68px;
+  position: absolute;
+  inset: auto auto 7% 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: rgba(7, 16, 22, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  font-size: 2.5rem;
+  line-height: 1;
+  transform: translateX(-50%);
+}
+
+.liveness-arrow[hidden] {
+  display: none;
+}
+
+.is-searching .liveness-picker {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
 @media (max-width: 900px) {
   :root {
     --page: min(100% - 32px, 720px);
@@ -1104,6 +1269,10 @@ input[type="checkbox"] {
     min-height: 82px;
   }
 
+  .liveness-launch {
+    min-height: 92px;
+  }
+
   .camera-controls {
     align-items: stretch;
     flex-direction: column;
@@ -1112,6 +1281,19 @@ input[type="checkbox"] {
   .camera-controls > div,
   .camera-controls .button {
     flex: 1;
+  }
+
+  .liveness-progress li {
+    gap: 5px;
+    font-size: 0.68rem;
+  }
+
+  .liveness-arrow {
+    width: 56px;
+    height: 56px;
+    left: 50%;
+    right: auto;
+    font-size: 2rem;
   }
 
   .form-heading {
