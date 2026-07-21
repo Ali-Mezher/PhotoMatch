@@ -21,3 +21,13 @@ code{overflow-wrap:anywhere}.notice{min-width:0}.status{justify-self:start}
 
 @media(max-width:760px){.person-search-heading{grid-template-columns:1fr;align-items:start;gap:18px}.search-scope{width:100%}.search-scope div{flex:1}.person-search .selfie-inputs{grid-template-columns:1fr}.search-submit{align-items:stretch;flex-direction:column}.search-submit>.button{width:100%}}
 @media(prefers-reduced-motion:reduce){.search-spinner{animation:none;border-color:var(--blue)}}
+
+/* Activity log: compact rows on overview, full history on its own page. */
+.activity-list{display:block;list-style:none;padding:0;margin:0;border-top:1px solid var(--border)}
+.activity-list li{min-height:48px;padding:11px 0;display:grid;grid-template-columns:minmax(190px,1.15fr) minmax(150px,.8fr) auto;align-items:center;gap:18px;border-bottom:1px solid var(--border);text-transform:none}
+.activity-action{font-size:13px;font-weight:680}
+.activity-scope,.activity-list time{color:var(--muted);font-size:12px}
+.activity-list time{font-variant-numeric:tabular-nums;white-space:nowrap}
+.activity-toolbar{justify-content:flex-end}
+.activity-page{margin-top:22px}
+@media(max-width:660px){.activity-list li{grid-template-columns:1fr;gap:2px}.activity-toolbar{align-items:stretch}.activity-toolbar .button{width:100%}}

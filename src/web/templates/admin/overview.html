@@ -59,9 +59,18 @@
   {% else %}<div class="empty-state"><h3>No events yet</h3><p>Create an event, then import its event photos.</p><a class="button" href="{{ url_for('admin.new_event') }}">Create first event</a></div>{% endif %}
 </section>
 <section class="section-block audit-block">
-  <div class="section-heading"><div><h2>Recent activity</h2><p>Security and operational actions recorded on this device.</p></div></div>
-  <ol class="activity-list">
-    {% for item in audit %}<li><span>{{ item.action|replace('_', ' ') }}</span><small>{{ item.event_id or 'Console' }} · {{ item.created_at }}</small></li>{% else %}<li class="muted">No activity recorded yet.</li>{% endfor %}
-  </ol>
+  <div class="section-heading">
+    <div><h2>Recent activity</h2><p>The latest security and operational actions on this device.</p></div>
+    {% if audit_total %}<a class="row-action" href="{{ url_for('admin.activity') }}">View All →</a>{% endif %}
+  </div>
+  <ul class="activity-list">
+    {% for item in audit %}
+    <li>
+      <strong class="activity-action">{{ item.action }}</strong>
+      <span class="activity-scope">{{ item.event_id or 'Admin console' }}</span>
+      <time datetime="{{ item.created_at|replace(' ', 'T') }}Z">{{ item.created_at }} UTC</time>
+    </li>
+    {% else %}<li class="muted">No activity recorded yet.</li>{% endfor %}
+  </ul>
 </section>
 {% endblock %}

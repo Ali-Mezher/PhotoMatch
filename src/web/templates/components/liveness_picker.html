@@ -1,0 +1,70 @@
+{% macro liveness_picker(challenge) %}
+<div
+  class="liveness-picker"
+  data-liveness-picker
+  data-challenge-direction="{{ challenge.direction }}"
+>
+  <input type="hidden" name="liveness_token" value="{{ challenge.token }}">
+  {% for field in ('liveness_front', 'liveness_turn', 'liveness_return') %}
+  <input
+    class="liveness-frame-input"
+    type="file"
+    name="{{ field }}"
+    accept="image/jpeg"
+    required
+    tabindex="-1"
+    aria-hidden="true"
+    data-liveness-frame="{{ loop.index0 }}"
+  >
+  {% endfor %}
+
+  <button
+    class="liveness-launch"
+    type="button"
+    data-liveness-open
+    aria-pressed="false"
+    aria-describedby="liveness-support"
+    disabled
+  >
+    <span class="camera-action-mark" aria-hidden="true"></span>
+    <span>
+      <strong data-liveness-label>Start Live Selfie Check</strong>
+      <small data-liveness-copy>Consent first, then complete a quick 3-step camera check</small>
+    </span>
+  </button>
+  <p class="field-help" id="liveness-support" data-liveness-support aria-live="polite">
+    Your camera stays on this device. Captured frames are not saved.
+  </p>
+
+  <dialog class="camera-dialog liveness-dialog" data-liveness-dialog aria-labelledby="liveness-title">
+    <div class="dialog-header">
+      <div>
+        <span class="dialog-step" data-liveness-step-label>Step 1 of 3</span>
+        <h2 id="liveness-title">Live Selfie Check</h2>
+      </div>
+      <button type="button" class="dialog-close" data-liveness-close aria-label="Cancel live selfie check">×</button>
+    </div>
+
+    <ol class="liveness-progress" aria-label="Live selfie steps">
+      <li class="is-current" data-liveness-step="0"><span>1</span>Face Forward</li>
+      <li data-liveness-step="1"><span>2</span>Turn</li>
+      <li data-liveness-step="2"><span>3</span>Return</li>
+    </ol>
+
+    <div class="camera-media liveness-media">
+      <video data-liveness-video autoplay muted playsinline></video>
+      <canvas data-liveness-canvas hidden></canvas>
+      <div class="liveness-guide" aria-hidden="true"></div>
+      <div class="liveness-arrow" data-liveness-arrow aria-hidden="true" hidden></div>
+    </div>
+
+    <div class="camera-controls liveness-controls">
+      <p data-liveness-status role="status" aria-live="polite">Allow camera access, then center your face.</p>
+      <div>
+        <button class="button button-secondary" type="button" data-liveness-cancel>Cancel</button>
+        <button class="button button-primary" type="button" data-liveness-capture disabled>Capture Front</button>
+      </div>
+    </div>
+  </dialog>
+</div>
+{% endmacro %}
