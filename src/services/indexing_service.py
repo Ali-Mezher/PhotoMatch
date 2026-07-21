@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import date
 from pathlib import Path
 
@@ -15,7 +16,13 @@ from config import (
 from src.indexing import event_index_exists, load_event_index, update_event_index
 
 from .indexing_manager import IndexingManager
-from .models import EventSummary, ImageIndexOutcome, ImageIndexStatus, IndexStatus
+from .models import (
+    EventSummary,
+    ImageIndexOutcome,
+    ImageIndexStatus,
+    IndexProgress,
+    IndexStatus,
+)
 from .status_store import StatusStore
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
@@ -196,6 +203,13 @@ class IndexingService:
         event_id = self._require_registered_event(event_id)
         return self.store.list_images(event_id)
 
+    def get_index_progress(self, event_id: str) -> IndexProgress:
+        event_id = self._require_registered_event(event_id)
+        progress = self.store.get_index_progress(event_id)
+        if progress is None:  # pragma: no cover - registration checked above
+            raise KeyError(f"Unknown event: {event_id}")
+        return progress
+
     def run_pending(self, show_progress: bool = False) -> None:
         """Synchronously drain queued jobs, primarily for CLI operation."""
         self._drain_queue(show_progress)
@@ -215,14 +229,38 @@ class IndexingService:
         paths = [
             Path(path) for path in self.store.paths_for_processing(event_id, rebuild)
         ]
+        self.store.start_index_progress(event_id, len(paths))
+
+        def record_progress(photo_path, status, face_count, error):
+            self.store.record_progress_outcome(
+                event_id,
+                ImageIndexOutcome(
+                    photo_path=str(photo_path),
+                    status=IndexStatus(status),
+                    face_count=face_count,
+                    error=error,
+                ),
+            )
 
         try:
-            _, outcomes = self._index_updater(
-                event_id,
-                paths,
-                rebuild=rebuild,
-                show_progress=show_progress,
-            )
+            updater_arguments = {
+                "rebuild": rebuild,
+                "show_progress": show_progress,
+            }
+            try:
+                updater_parameters = inspect.signature(
+                    self._index_updater
+                ).parameters.values()
+                supports_progress = any(
+                    parameter.name == "progress_callback"
+                    or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                    for parameter in updater_parameters
+                )
+            except (TypeError, ValueError):
+                supports_progress = False
+            if supports_progress:
+                updater_arguments["progress_callback"] = record_progress
+            _, outcomes = self._index_updater(event_id, paths, **updater_arguments)
             self.store.record_outcomes(
                 event_id,
                 [

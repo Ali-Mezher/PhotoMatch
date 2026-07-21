@@ -9,6 +9,7 @@ from zipfile import ZipFile
 
 from PIL import Image
 from src.services.admin_store import AdminStore, RuntimeSettings
+from src.services.models import ImageIndexOutcome, IndexStatus
 from src.services.status_store import StatusStore
 from src.web import create_app
 
@@ -396,3 +397,37 @@ def test_admin_search_download_and_zip_are_limited_to_result_set(tmp_path):
     assert client.get(
         f"/admin/events/other-event/search-results/{token}/download/{photo_id}"
     ).status_code == 404
+
+
+def test_admin_event_page_reports_live_index_percentage(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    indexing = app.extensions["indexing_service"]
+    raw_dir = indexing.events_dir / "progress-event" / "raw"
+    raw_dir.mkdir(parents=True)
+    first = raw_dir / "first.png"
+    second = raw_dir / "second.png"
+    first.write_bytes(_png()[0].getvalue())
+    second.write_bytes(_png()[0].getvalue())
+    indexing.register_event("progress-event", "2026-07-21", "Progress Event")
+    indexing.request_index("progress-event")
+    assert indexing.store.claim_next_event() == ("progress-event", False)
+    indexing.store.start_index_progress("progress-event", 2)
+    indexing.store.record_progress_outcome(
+        "progress-event",
+        ImageIndexOutcome(str(first.resolve()), IndexStatus.INDEXED, face_count=1),
+    )
+
+    response = client.get("/admin/events/progress-event/index-progress")
+    detail = client.get("/admin/events/progress-event")
+
+    assert response.status_code == 200
+    assert response.json == {
+        "status": "indexing",
+        "completed": 1,
+        "total": 2,
+        "percent": 50,
+    }
+    assert b'data-index-progress' in detail.data
+    assert b">50%</strong>" in detail.data

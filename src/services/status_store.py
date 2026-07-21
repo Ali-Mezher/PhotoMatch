@@ -7,7 +7,13 @@ import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 
-from .models import EventSummary, ImageIndexOutcome, ImageIndexStatus, IndexStatus
+from .models import (
+    EventSummary,
+    ImageIndexOutcome,
+    ImageIndexStatus,
+    IndexProgress,
+    IndexStatus,
+)
 
 EVENT_ACCESS_CODE_LENGTH = 8
 _HEX_CHARACTERS = frozenset("0123456789ABCDEF")
@@ -52,6 +58,8 @@ class StatusStore:
                     status TEXT NOT NULL,
                     rebuild_required INTEGER NOT NULL DEFAULT 0,
                     pipeline_version TEXT NOT NULL DEFAULT '',
+                    index_total INTEGER NOT NULL DEFAULT 0,
+                    index_completed INTEGER NOT NULL DEFAULT 0,
                     error TEXT,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -92,6 +100,14 @@ class StatusStore:
             }
             if "display_name" not in columns:
                 connection.execute("ALTER TABLE events ADD COLUMN display_name TEXT")
+            if "index_total" not in columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN index_total INTEGER NOT NULL DEFAULT 0"
+                )
+            if "index_completed" not in columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN index_completed INTEGER NOT NULL DEFAULT 0"
+                )
             image_columns = {
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(images)").fetchall()
@@ -125,6 +141,8 @@ class StatusStore:
                 status TEXT NOT NULL,
                 rebuild_required INTEGER NOT NULL DEFAULT 0,
                 pipeline_version TEXT NOT NULL DEFAULT '',
+                index_total INTEGER NOT NULL DEFAULT 0,
+                index_completed INTEGER NOT NULL DEFAULT 0,
                 error TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -467,18 +485,29 @@ class StatusStore:
         """Persist a queue request unless the same event is already active."""
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT status FROM events WHERE event_id = ?", (event_id,)
+                "SELECT status, rebuild_required FROM events WHERE event_id = ?", (event_id,)
             ).fetchone()
             if row is None:
                 raise KeyError(f"Unknown event: {event_id}")
             if row["status"] in {IndexStatus.QUEUED.value, IndexStatus.INDEXING.value}:
                 return False
+            if row["rebuild_required"]:
+                total = connection.execute(
+                    "SELECT COUNT(*) AS total FROM images WHERE event_id = ?",
+                    (event_id,),
+                ).fetchone()["total"]
+            else:
+                total = connection.execute(
+                    "SELECT COUNT(*) AS total FROM images WHERE event_id = ? AND status = ?",
+                    (event_id, IndexStatus.PENDING.value),
+                ).fetchone()["total"]
             connection.execute(
                 """
                 UPDATE events SET status = ?, error = NULL,
+                    index_total = ?, index_completed = 0,
                     updated_at = CURRENT_TIMESTAMP WHERE event_id = ?
                 """,
-                (IndexStatus.QUEUED.value, event_id),
+                (IndexStatus.QUEUED.value, total, event_id),
             )
             connection.execute(
                 """
@@ -563,11 +592,68 @@ class StatusStore:
                 ],
             )
 
+    def start_index_progress(self, event_id: str, total: int) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE events SET index_total = ?, index_completed = 0,
+                    updated_at = CURRENT_TIMESTAMP WHERE event_id = ?
+                """,
+                (max(0, total), event_id),
+            )
+
+    def record_progress_outcome(
+        self, event_id: str, outcome: ImageIndexOutcome
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE images SET status = ?, face_count = ?, error = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE event_id = ? AND photo_path = ?
+                """,
+                (
+                    outcome.status.value,
+                    outcome.face_count,
+                    outcome.error,
+                    event_id,
+                    outcome.photo_path,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE events
+                SET index_completed = MIN(index_total, index_completed + 1),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE event_id = ?
+                """,
+                (event_id,),
+            )
+
+    def get_index_progress(self, event_id: str) -> IndexProgress | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT event_id, status, index_completed, index_total
+                FROM events WHERE event_id = ?
+                """,
+                (event_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return IndexProgress(
+            event_id=row["event_id"],
+            status=IndexStatus(row["status"]),
+            completed=row["index_completed"],
+            total=row["index_total"],
+        )
+
     def complete_event(self, event_id: str, pipeline_version: str) -> None:
         with self._connect() as connection:
             connection.execute(
                 """
                 UPDATE events SET status = ?, pipeline_version = ?, error = NULL,
+                    index_completed = index_total,
                     updated_at = CURRENT_TIMESTAMP WHERE event_id = ?
                 """,
                 (IndexStatus.INDEXED.value, pipeline_version, event_id),

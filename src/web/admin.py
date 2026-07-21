@@ -389,6 +389,21 @@ def index_event(event_id: str):
     return redirect(url_for("admin.event_detail", event_id=event_id), code=303)
 
 
+@admin.get("/events/<event_id>/index-progress")
+@admin_required
+def index_progress(event_id: str):
+    try:
+        progress = _indexing().get_index_progress(event_id)
+    except (KeyError, ValueError):
+        abort(404)
+    return jsonify(
+        status=progress.status.value,
+        completed=progress.completed,
+        total=progress.total,
+        percent=progress.percent,
+    )
+
+
 @admin.post("/events/<event_id>/retry")
 @admin_required
 def retry_event(event_id: str):
@@ -591,6 +606,7 @@ def _render_event_detail(
     status: int = 200,
 ):
     event = _get_event_or_404(event_id)
+    index_progress = _indexing().get_index_progress(event_id)
     if search is None and search_token:
         search = result_store().get(search_token)
         if search is None:
@@ -608,6 +624,7 @@ def _render_event_detail(
             search=search,
             search_error=search_error,
             search_ready=_event_is_searchable(event),
+            index_progress=index_progress,
         ),
         status,
     )
