@@ -13,6 +13,19 @@ class IndexStatus(StrEnum):
     INDEXED = "indexed"
     NO_FACE = "no_face"
     FAILED = "failed"
+    # Operator-driven holds. Both keep whatever progress has already been
+    # persisted; ``paused`` is resumed to continue, ``stopped`` is a deliberate
+    # halt. Neither is claimed by the worker until explicitly resumed.
+    PAUSED = "paused"
+    STOPPED = "stopped"
+
+
+# Event-level states an operator can place a hold on, and the held states
+# themselves. Kept here so the store, service, and web layers agree.
+HELD_STATUSES = frozenset({IndexStatus.PAUSED, IndexStatus.STOPPED})
+HOLDABLE_STATUSES = frozenset(
+    {IndexStatus.PENDING, IndexStatus.QUEUED, IndexStatus.INDEXING}
+)
 
 
 @dataclass(frozen=True)

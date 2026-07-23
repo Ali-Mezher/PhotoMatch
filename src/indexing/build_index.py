@@ -37,6 +37,9 @@ ACTIVE_INDEX_FILENAME = "active.json"
 GENERATIONS_DIRNAME = "generations"
 _GENERATION_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 ProgressCallback = Callable[[Path, str, int, str | None], None]
+# Returns False to ask the loop to stop after the current photo. Used to
+# implement operator pause/stop without abandoning already-processed work.
+ContinueCheck = Callable[[], bool]
 
 
 @dataclass(frozen=True)
@@ -135,6 +138,7 @@ def _process_photos(
     photo_paths: list[Path],
     show_progress: bool,
     progress_callback: ProgressCallback | None = None,
+    should_continue: ContinueCheck | None = None,
 ) -> list[IndexBuildOutcome]:
     iterator = (
         tqdm(photo_paths, desc="Indexing photos") if show_progress else photo_paths
@@ -142,6 +146,12 @@ def _process_photos(
     outcomes: list[IndexBuildOutcome] = []
 
     for photo_path in iterator:
+        # Honor a pause/stop request between photos so faces added so far are
+        # kept: the caller publishes the partial index and reprocesses only the
+        # photos not reached here.
+        if should_continue is not None and not should_continue():
+            break
+
         image = cv2.imread(str(photo_path))
         if image is None:
             outcome = IndexBuildOutcome(
@@ -193,8 +203,14 @@ def update_event_index(
     rebuild: bool = False,
     show_progress: bool = False,
     progress_callback: ProgressCallback | None = None,
+    should_continue: ContinueCheck | None = None,
 ) -> tuple[EventIndex, list[IndexBuildOutcome]]:
-    """Append selected photos or atomically rebuild an event's whole index."""
+    """Append selected photos or atomically rebuild an event's whole index.
+
+    If ``should_continue`` returns False, processing stops after the current
+    photo and whatever has been indexed so far is still published, so a paused
+    or stopped run keeps its progress and resumes by appending the remainder.
+    """
     output_dir = event_dir(event_id) / EVENT_INDEXED_SUBDIR
     if rebuild or not event_index_exists(event_id):
         index = EventIndex()
@@ -206,6 +222,7 @@ def update_event_index(
         [Path(path) for path in photo_paths],
         show_progress,
         progress_callback,
+        should_continue,
     )
     _publish_index(index, output_dir)
     return index, outcomes

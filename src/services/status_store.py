@@ -8,6 +8,8 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from .models import (
+    HELD_STATUSES,
+    HOLDABLE_STATUSES,
     EventSummary,
     ImageIndexOutcome,
     ImageIndexStatus,
@@ -494,7 +496,8 @@ class StatusStore:
                 UPDATE events
                 SET rebuild_required = 1,
                     status = CASE
-                        WHEN status IN ('queued', 'indexing') THEN status
+                        WHEN status IN ('queued', 'indexing', 'paused', 'stopped')
+                            THEN status
                         ELSE ?
                     END,
                     error = NULL,
@@ -520,6 +523,11 @@ class StatusStore:
             if row is None:
                 raise KeyError(f"Unknown event: {event_id}")
             if row["status"] in {IndexStatus.QUEUED.value, IndexStatus.INDEXING.value}:
+                return False
+            # An operator hold outranks automatic scheduling: reconciliation and
+            # post-job requeues must not disturb a paused or stopped event.
+            # ``resume_event`` is the only sanctioned way out of a hold.
+            if row["status"] in {status.value for status in HELD_STATUSES}:
                 return False
             if row["rebuild_required"]:
                 total = connection.execute(
@@ -571,13 +579,26 @@ class StatusStore:
                 """,
                 (IndexStatus.INDEXING.value, event_id),
             )
-            connection.execute(
-                """
-                UPDATE images SET status = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE event_id = ? AND status = ?
-                """,
-                (IndexStatus.INDEXING.value, event_id, IndexStatus.QUEUED.value),
-            )
+            if rebuild_required:
+                # A rebuild reprocesses every photo, so every photo becomes part
+                # of the in-flight batch. Marking them all ``indexing`` keeps the
+                # image ledger consistent if the run is paused midway: whatever
+                # is not yet republished stays reprocessable (see pause_event).
+                connection.execute(
+                    """
+                    UPDATE images SET status = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE event_id = ?
+                    """,
+                    (IndexStatus.INDEXING.value, event_id),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE images SET status = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE event_id = ? AND status = ?
+                    """,
+                    (IndexStatus.INDEXING.value, event_id, IndexStatus.QUEUED.value),
+                )
             return event_id, rebuild_required
 
     def paths_for_processing(self, event_id: str, rebuild: bool) -> list[str]:
@@ -717,6 +738,92 @@ class StatusStore:
                 (IndexStatus.PENDING.value, event_id, IndexStatus.FAILED.value),
             )
             return cursor.rowcount
+
+    def hold_event(self, event_id: str, held_status: IndexStatus) -> bool:
+        """Place an operator hold, keeping already-persisted progress.
+
+        Any photos still in the active batch (``queued``/``indexing``) revert to
+        ``pending`` so a later resume reprocesses exactly the unfinished ones;
+        photos already ``indexed``/``no_face``/``failed`` are left untouched.
+        Returns False when the event is not in a holdable state.
+        """
+        if held_status not in HELD_STATUSES:
+            raise ValueError("held_status must be a paused or stopped status")
+        holdable = {status.value for status in HOLDABLE_STATUSES}
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT status FROM events WHERE event_id = ?", (event_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown event: {event_id}")
+            if row["status"] not in holdable:
+                return False
+            connection.execute(
+                """
+                UPDATE events SET status = ?, error = NULL,
+                    updated_at = CURRENT_TIMESTAMP WHERE event_id = ?
+                """,
+                (held_status.value, event_id),
+            )
+            connection.execute(
+                """
+                UPDATE images SET status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE event_id = ? AND status IN (?, ?)
+                """,
+                (
+                    IndexStatus.PENDING.value,
+                    event_id,
+                    IndexStatus.QUEUED.value,
+                    IndexStatus.INDEXING.value,
+                ),
+            )
+            return True
+
+    def resume_event(self, event_id: str) -> bool:
+        """Release an operator hold and re-queue the remaining pending work.
+
+        Mirrors :meth:`queue_event`'s bookkeeping so a resumed event behaves
+        exactly like a freshly queued one. Returns False when the event is not
+        currently held.
+        """
+        held = {status.value for status in HELD_STATUSES}
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT status, rebuild_required FROM events WHERE event_id = ?",
+                (event_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown event: {event_id}")
+            if row["status"] not in held:
+                return False
+            if row["rebuild_required"]:
+                total = connection.execute(
+                    "SELECT COUNT(*) AS total FROM images WHERE event_id = ?",
+                    (event_id,),
+                ).fetchone()["total"]
+            else:
+                total = connection.execute(
+                    "SELECT COUNT(*) AS total FROM images WHERE event_id = ? AND status = ?",
+                    (event_id, IndexStatus.PENDING.value),
+                ).fetchone()["total"]
+            connection.execute(
+                """
+                UPDATE events SET status = ?, error = NULL,
+                    index_total = ?, index_completed = 0,
+                    updated_at = CURRENT_TIMESTAMP WHERE event_id = ?
+                """,
+                (IndexStatus.QUEUED.value, total, event_id),
+            )
+            connection.execute(
+                """
+                UPDATE images SET status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE event_id = ? AND status = ?
+                """,
+                (IndexStatus.QUEUED.value, event_id, IndexStatus.PENDING.value),
+            )
+            return True
 
     def recover_interrupted_events(self) -> list[str]:
         """Return persisted unfinished events to the queue after a restart."""
