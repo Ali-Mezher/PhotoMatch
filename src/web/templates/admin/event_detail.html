@@ -22,13 +22,22 @@
   <section class="form-panel operations-panel">
     <div class="section-heading"><div><h2>Processing</h2><p>Indexing and clustering run one at a time.</p></div><span class="status status-{{ event.status.value }}">{{ event.status.value|replace('_', ' ') }}</span></div>
     {% if event.error %}<div class="notice notice-error">{{ event.error }}</div>{% endif %}
-    <div class="index-progress" data-index-progress data-active="{{ 'true' if event.status.value in ['queued', 'indexing'] else 'false' }}" data-url="{{ url_for('admin.index_progress', event_id=event.event_id) }}" {% if event.status.value not in ['queued', 'indexing'] %}hidden{% endif %}>
-      <div><span data-progress-label>{{ 'Waiting' if event.status.value == 'queued' else 'Indexing' }}</span><strong data-progress-percent>{{ index_progress.percent }}%</strong></div>
+    {% set is_active = event.status.value in ['queued', 'indexing'] %}
+    {% set is_held = event.status.value in ['paused', 'stopped'] %}
+    <div class="index-progress" data-index-progress data-active="{{ 'true' if is_active else 'false' }}" data-url="{{ url_for('admin.index_progress', event_id=event.event_id) }}" {% if not is_active and not is_held %}hidden{% endif %}>
+      <div><span data-progress-label>{{ 'Waiting' if event.status.value == 'queued' else ('Paused' if event.status.value == 'paused' else ('Stopped' if event.status.value == 'stopped' else 'Indexing')) }}</span><strong data-progress-percent>{{ index_progress.percent }}%</strong></div>
       <progress data-progress-bar value="{{ index_progress.percent }}" max="100" aria-label="Indexing progress">{{ index_progress.percent }}%</progress>
     </div>
+    {% if is_held %}<div class="notice notice-warning">Indexing is {{ event.status.value }}. {{ event.indexed_images }} photo{{ 's' if event.indexed_images != 1 }} already indexed {{ 'is' if event.indexed_images == 1 else 'are' }} kept. Resume to process the {{ event.pending_images }} remaining.</div>{% endif %}
     <dl class="detail-list"><div><dt>Pending images</dt><dd>{{ event.pending_images }}</dd></div><div><dt>Cluster result</dt><dd>{% if cluster %}<a href="{{ url_for('admin.cluster_review', event_id=event.event_id, run_id=cluster.run_id) }}">{{ 'Stale — run again' if cluster_stale else cluster.status|capitalize }}</a>{% else %}Not run{% endif %}</dd></div></dl>
     <div class="operation-actions">
       <form action="{{ url_for('admin.index_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Check and index</button></form>
+      {% if is_active %}
+      <form action="{{ url_for('admin.pause_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Pause</button></form>
+      <form action="{{ url_for('admin.stop_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-danger" type="submit">Stop</button></form>
+      {% elif is_held %}
+      <form action="{{ url_for('admin.resume_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-primary" type="submit">Resume</button></form>
+      {% endif %}
       {% if event.failed_images %}<form action="{{ url_for('admin.retry_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Retry failed</button></form>{% endif %}
       <form action="{{ url_for('admin.cluster_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-primary" type="submit" {% if event.status.value != 'indexed' or event.pending_images or event.failed_images %}disabled title="Finish indexing first"{% endif %}>Cluster identities</button></form>
     </div>

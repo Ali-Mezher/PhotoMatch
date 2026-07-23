@@ -555,6 +555,77 @@ def test_admin_event_page_reports_live_index_percentage(tmp_path):
     assert b">50%</strong>" in detail.data
 
 
+def _queued_event(app, event_id="hold-event", photo_count=2):
+    indexing = app.extensions["indexing_service"]
+    raw_dir = indexing.events_dir / event_id / "raw"
+    raw_dir.mkdir(parents=True)
+    for index in range(photo_count):
+        (raw_dir / f"p{index}.png").write_bytes(_png()[0].getvalue())
+    indexing.register_event(event_id, "2026-07-21", "Hold Event")
+    indexing.request_index(event_id)
+    return indexing
+
+
+def test_admin_can_pause_and_resume_a_queued_event(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    indexing = _queued_event(app)
+
+    paused = client.post(
+        "/admin/events/hold-event/pause",
+        data={"_csrf_token": _csrf(client)},
+    )
+
+    assert paused.status_code == 303
+    assert indexing.get_event("hold-event").status is IndexStatus.PAUSED
+    detail = client.get("/admin/events/hold-event")
+    assert b"/admin/events/hold-event/resume" in detail.data
+    assert b"status-paused" in detail.data
+    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "index_paused"
+
+    resumed = client.post(
+        "/admin/events/hold-event/resume",
+        data={"_csrf_token": _csrf(client)},
+    )
+
+    assert resumed.status_code == 303
+    assert indexing.get_event("hold-event").status is IndexStatus.QUEUED
+    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "index_resumed"
+
+
+def test_admin_can_stop_a_queued_event_and_keep_it_stopped(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    indexing = _queued_event(app, event_id="stop-event")
+
+    stopped = client.post(
+        "/admin/events/stop-event/stop",
+        data={"_csrf_token": _csrf(client)},
+    )
+
+    assert stopped.status_code == 303
+    assert indexing.get_event("stop-event").status is IndexStatus.STOPPED
+    detail = client.get("/admin/events/stop-event")
+    assert b"status-stopped" in detail.data
+    assert b"/admin/events/stop-event/resume" in detail.data
+    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "index_stopped"
+
+
+def test_pause_unknown_event_returns_404(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+
+    response = client.post(
+        "/admin/events/missing/pause",
+        data={"_csrf_token": _csrf(client)},
+    )
+
+    assert response.status_code == 404
+
+
 def test_admin_photo_import_has_no_total_selection_limit_and_uses_safe_batches(tmp_path):
     script = (Path(__file__).parents[1] / "src" / "web" / "static" / "admin.js").read_text(
         encoding="utf-8"

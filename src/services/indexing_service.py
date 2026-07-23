@@ -16,6 +16,7 @@ from config import (
 )
 from src.indexing import event_index_exists, load_event_index, update_event_index
 
+from .index_control import ControlAction, IndexControl
 from .indexing_manager import IndexingManager
 from .models import (
     EventSummary,
@@ -32,6 +33,11 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 class IndexingService:
     """Track source inventory and run the minimum safe indexing work."""
 
+    _HELD_STATUS = {
+        ControlAction.PAUSE: IndexStatus.PAUSED,
+        ControlAction.STOP: IndexStatus.STOPPED,
+    }
+
     def __init__(
         self,
         events_dir: Path = EVENTS_DIR,
@@ -45,6 +51,7 @@ class IndexingService:
         self._index_updater = index_updater
         self._index_exists = index_exists
         self._index_loader = index_loader
+        self._control = IndexControl()
         self._manager = IndexingManager(lambda: self._drain_queue(False))
 
     def start(self) -> None:
@@ -106,6 +113,43 @@ class IndexingService:
         if count:
             self.request_index(event_id)
         return count
+
+    def pause_index(self, event_id: str) -> bool:
+        """Halt indexing for an event, keeping all progress made so far.
+
+        A paused event is resumed with :meth:`resume_index`. If a job is running
+        it stops after the current photo; the partial index is published so
+        already-indexed photos remain indexed.
+        """
+        return self._hold(event_id, ControlAction.PAUSE)
+
+    def stop_index(self, event_id: str) -> bool:
+        """Stop indexing for an event, keeping all progress made so far.
+
+        Like :meth:`pause_index` but signals a deliberate halt rather than a
+        temporary one. Progress is preserved; resume to continue later.
+        """
+        return self._hold(event_id, ControlAction.STOP)
+
+    def resume_index(self, event_id: str) -> bool:
+        """Release a paused or stopped event and continue the remaining work."""
+        event_id = self._require_registered_event(event_id)
+        self._control.clear(event_id)
+        resumed = self.store.resume_event(event_id)
+        if resumed:
+            self._manager.signal()
+        return resumed
+
+    def _hold(self, event_id: str, action: ControlAction) -> bool:
+        event_id = self._require_registered_event(event_id)
+        # Signal an in-flight run to stop after the current photo, then persist
+        # the hold. A run that is not currently active is held purely by the SQL
+        # transition; an active one is finalized by _run_index_job.
+        self._control.request(event_id, action)
+        held = self.store.hold_event(event_id, self._HELD_STATUS[action])
+        if not held:
+            self._control.clear(event_id)
+        return held
 
     def reconcile_registered_events(self) -> list[str]:
         """Queue changed registered events during startup without polling.
@@ -207,6 +251,7 @@ class IndexingService:
         if event_root.parent != self.events_dir:
             raise ValueError("event_id resolves outside the configured events directory")
         self.store.delete_event_if_idle(event_id)
+        self._control.clear(event_id)
         if event_root.exists():
             shutil.rmtree(event_root)
 
@@ -253,24 +298,19 @@ class IndexingService:
                 ),
             )
 
+        def should_continue() -> bool:
+            return self._control.should_stop(event_id) is None
+
         try:
             updater_arguments = {
                 "rebuild": rebuild,
                 "show_progress": show_progress,
             }
-            try:
-                updater_parameters = inspect.signature(
-                    self._index_updater
-                ).parameters.values()
-                supports_progress = any(
-                    parameter.name == "progress_callback"
-                    or parameter.kind is inspect.Parameter.VAR_KEYWORD
-                    for parameter in updater_parameters
-                )
-            except (TypeError, ValueError):
-                supports_progress = False
-            if supports_progress:
-                updater_arguments["progress_callback"] = record_progress
+            self._add_optional_updater_arguments(
+                updater_arguments,
+                progress_callback=record_progress,
+                should_continue=should_continue,
+            )
             _, outcomes = self._index_updater(event_id, paths, **updater_arguments)
             self.store.record_outcomes(
                 event_id,
@@ -284,8 +324,18 @@ class IndexingService:
                     for outcome in outcomes
                 ],
             )
+            honored = self._control.triggered(event_id)
+            if honored is not None:
+                # The run stopped early on an operator hold. Outcomes for the
+                # processed photos are already recorded and the partial index is
+                # published; park the event in its held state without completing
+                # or requeuing it.
+                self._control.clear(event_id)
+                self.store.hold_event(event_id, self._HELD_STATUS[honored])
+                return
             self.store.complete_event(event_id, INDEX_PIPELINE_VERSION)
         except Exception as exc:  # noqa: BLE001 - one event must not stop the queue
+            self._control.clear(event_id)
             self.store.fail_event(event_id, str(exc))
             return
 
@@ -295,6 +345,28 @@ class IndexingService:
         if self.reconcile_event(event_id):
             self.store.queue_event(event_id)
             self._manager.signal()
+
+    def _add_optional_updater_arguments(self, arguments: dict, **candidates) -> None:
+        """Pass optional keyword arguments only if the updater accepts them.
+
+        The updater is injectable, and test doubles implement narrower
+        signatures; introspection keeps those working while the production
+        ``update_event_index`` receives ``progress_callback``/``should_continue``.
+        """
+        try:
+            parameters = list(
+                inspect.signature(self._index_updater).parameters.values()
+            )
+        except (TypeError, ValueError):
+            return
+        accepts_var_keyword = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters
+        )
+        parameter_names = {parameter.name for parameter in parameters}
+        for name, value in candidates.items():
+            if accepts_var_keyword or name in parameter_names:
+                arguments[name] = value
 
     def _event_images(self, event_id: str) -> list[Path]:
         raw_dir = self._raw_dir(event_id)

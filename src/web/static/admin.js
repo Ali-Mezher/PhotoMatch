@@ -29,7 +29,8 @@
         if (result.status === "queued" || result.status === "indexing") {
           window.setTimeout(refreshProgress, 1000);
         } else {
-          label.textContent = result.status === "indexed" ? "Complete" : "Stopped";
+          const labels = { indexed: "Complete", paused: "Paused", stopped: "Stopped" };
+          label.textContent = labels[result.status] || "Stopped";
           window.setTimeout(() => window.location.reload(), 650);
         }
       } catch (_error) {

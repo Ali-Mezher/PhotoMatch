@@ -465,6 +465,60 @@ def index_progress(event_id: str):
     )
 
 
+@admin.post("/events/<event_id>/pause")
+@admin_required
+def pause_event(event_id: str):
+    try:
+        held = _indexing().pause_index(event_id)
+    except (KeyError, ValueError):
+        abort(404)
+    _coordinator().signal()
+    _admin_store().record_audit("index_paused", event_id, held=held)
+    flash(
+        "Indexing paused. Progress so far is kept — resume to continue."
+        if held
+        else "There is no active indexing to pause for this event.",
+        "success" if held else "error",
+    )
+    return redirect(url_for("admin.event_detail", event_id=event_id), code=303)
+
+
+@admin.post("/events/<event_id>/stop")
+@admin_required
+def stop_event(event_id: str):
+    try:
+        held = _indexing().stop_index(event_id)
+    except (KeyError, ValueError):
+        abort(404)
+    _coordinator().signal()
+    _admin_store().record_audit("index_stopped", event_id, held=held)
+    flash(
+        "Indexing stopped. Photos already indexed are kept — resume to finish later."
+        if held
+        else "There is no active indexing to stop for this event.",
+        "success" if held else "error",
+    )
+    return redirect(url_for("admin.event_detail", event_id=event_id), code=303)
+
+
+@admin.post("/events/<event_id>/resume")
+@admin_required
+def resume_event(event_id: str):
+    try:
+        resumed = _indexing().resume_index(event_id)
+    except (KeyError, ValueError):
+        abort(404)
+    _coordinator().signal()
+    _admin_store().record_audit("index_resumed", event_id, resumed=resumed)
+    flash(
+        "Indexing resumed for the remaining photos."
+        if resumed
+        else "This event is not paused or stopped.",
+        "success" if resumed else "error",
+    )
+    return redirect(url_for("admin.event_detail", event_id=event_id), code=303)
+
+
 @admin.post("/events/<event_id>/retry")
 @admin_required
 def retry_event(event_id: str):
