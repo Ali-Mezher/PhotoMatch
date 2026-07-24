@@ -15,6 +15,7 @@ from .models import (
     ImageIndexStatus,
     IndexProgress,
     IndexStatus,
+    Organizer,
 )
 
 EVENT_ACCESS_CODE_LENGTH = 8
@@ -94,6 +95,18 @@ class StatusStore:
                     FOREIGN KEY (event_id) REFERENCES events(event_id)
                         ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS event_organizers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (event_id) REFERENCES events(event_id)
+                        ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_event_organizers
+                    ON event_organizers(event_id);
                 """
             )
             columns = {
@@ -259,6 +272,54 @@ class StatusStore:
                 continue
             return access_code
         raise RuntimeError("Could not allocate a unique event access code")
+
+    def add_organizer(self, event_id: str, name: str, email: str) -> Organizer:
+        """Attach a responsible person to an event and return the stored row."""
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM events WHERE event_id = ?", (event_id,)
+            ).fetchone() is None:
+                raise KeyError(f"Unknown event: {event_id}")
+            cursor = connection.execute(
+                """
+                INSERT INTO event_organizers(event_id, name, email)
+                VALUES (?, ?, ?)
+                """,
+                (event_id, name, email),
+            )
+            row = connection.execute(
+                "SELECT * FROM event_organizers WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+        return self._organizer_from_row(row)
+
+    def list_organizers(self, event_id: str) -> list[Organizer]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM event_organizers WHERE event_id = ?
+                ORDER BY created_at, id
+                """,
+                (event_id,),
+            ).fetchall()
+        return [self._organizer_from_row(row) for row in rows]
+
+    def remove_organizer(self, event_id: str, organizer_id: int) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM event_organizers WHERE event_id = ? AND id = ?",
+                (event_id, organizer_id),
+            )
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def _organizer_from_row(row: sqlite3.Row) -> Organizer:
+        return Organizer(
+            id=row["id"],
+            event_id=row["event_id"],
+            name=row["name"],
+            email=row["email"],
+            created_at=row["created_at"],
+        )
 
     def get_event(self, event_id: str) -> EventSummary | None:
         with self._connect() as connection:
