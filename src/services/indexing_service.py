@@ -165,10 +165,10 @@ class IndexingService:
         name = (name or "").strip()
         email = (email or "").strip()
         if not name:
-            raise ValueError("Organizer name is required.")
+            raise ValueError("Host name is required.")
         if len(name) > MAX_ORGANIZER_NAME_LENGTH:
             raise ValueError(
-                f"Organizer name must be {MAX_ORGANIZER_NAME_LENGTH} characters or fewer."
+                f"Host name must be {MAX_ORGANIZER_NAME_LENGTH} characters or fewer."
             )
         if len(email) > MAX_ORGANIZER_EMAIL_LENGTH or not _EMAIL_PATTERN.match(email):
             raise ValueError("Enter a valid email address.")

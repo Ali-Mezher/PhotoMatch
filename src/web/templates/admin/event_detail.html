@@ -43,17 +43,17 @@
     </div>
   </section>
 </div>
-<section class="section-block" id="organizers">
-  <div class="section-heading"><div><h2>Organizers</h2><p>People responsible for this event. Email them the attendee code so they can share it with attendees.</p></div>{% if organizer_mailto %}<a class="button button-primary" href="{{ organizer_mailto }}">Email attendee code</a>{% endif %}</div>
+<section class="section-block" id="hosts">
+  <div class="section-heading"><div><h2>Hosts</h2><p>People running this event. Email them the attendee code to share with attendees.</p></div>{% if organizer_mailto %}<a class="button button-primary" href="{{ organizer_mailto }}">Email attendee code</a>{% endif %}</div>
   {% if organizer_error %}<div class="notice notice-error" role="alert">{{ organizer_error }}</div>{% endif %}
   <div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th></th></tr></thead><tbody>
-    {% for organizer in organizers %}<tr><td data-label="Name"><strong>{{ organizer.name }}</strong></td><td data-label="Email"><a href="mailto:{{ organizer.email }}">{{ organizer.email }}</a></td><td data-label=""><form action="{{ url_for('admin.remove_organizer', event_id=event.event_id, organizer_id=organizer.id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-danger" type="submit">Remove</button></form></td></tr>{% else %}<tr><td colspan="3" class="empty-cell">No organizers added yet.</td></tr>{% endfor %}
+    {% for organizer in organizers %}<tr><td data-label="Name"><strong>{{ organizer.name }}</strong></td><td data-label="Email"><a href="mailto:{{ organizer.email }}">{{ organizer.email }}</a></td><td data-label=""><form action="{{ url_for('admin.remove_organizer', event_id=event.event_id, organizer_id=organizer.id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-danger" type="submit">Remove</button></form></td></tr>{% else %}<tr><td colspan="3" class="empty-cell">No hosts added yet.</td></tr>{% endfor %}
   </tbody></table></div>
   <form class="organizer-form" action="{{ url_for('admin.add_organizer', event_id=event.event_id) }}" method="post">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <label>Name<input name="name" maxlength="120" autocomplete="off" placeholder="e.g. Deemah" required></label>
     <label>Email<input name="email" type="email" maxlength="254" autocomplete="off" placeholder="name@example.com" required></label>
-    <button class="button" type="submit">Add organizer</button>
+    <button class="button" type="submit">Add host</button>
   </form>
 </section>
 <div class="workflow-divider" aria-hidden="true"></div>

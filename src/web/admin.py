@@ -287,11 +287,11 @@ def add_organizer(event_id: str):
     except ValueError as exc:
         return _render_event_detail(event_id, organizer_error=str(exc), status=400)
     _admin_store().record_audit(
-        "organizer_added", event_id, name=organizer.name, email=organizer.email
+        "host_added", event_id, name=organizer.name, email=organizer.email
     )
-    flash(f"Added {organizer.name} as an organizer.", "success")
+    flash(f"Added {organizer.name} as a host.", "success")
     return redirect(
-        url_for("admin.event_detail", event_id=event_id) + "#organizers", code=303
+        url_for("admin.event_detail", event_id=event_id) + "#hosts", code=303
     )
 
 
@@ -302,13 +302,13 @@ def remove_organizer(event_id: str, organizer_id: int):
     removed = _indexing().remove_organizer(event_id, organizer_id)
     if removed:
         _admin_store().record_audit(
-            "organizer_removed", event_id, organizer_id=organizer_id
+            "host_removed", event_id, organizer_id=organizer_id
         )
-        flash("Organizer removed.", "success")
+        flash("Host removed.", "success")
     else:
-        flash("That organizer was already removed.", "error")
+        flash("That host was already removed.", "error")
     return redirect(
-        url_for("admin.event_detail", event_id=event_id) + "#organizers", code=303
+        url_for("admin.event_detail", event_id=event_id) + "#hosts", code=303
     )
 
 

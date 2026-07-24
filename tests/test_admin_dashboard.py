@@ -646,7 +646,7 @@ def test_admin_can_add_list_and_email_organizers(tmp_path):
     )
 
     assert added.status_code == 303
-    assert added.location.endswith("#organizers")
+    assert added.location.endswith("#hosts")
     detail = client.get("/admin/events/gala")
     assert b"Deemah" in detail.data
     assert b"ali@example.com" in detail.data
@@ -656,7 +656,7 @@ def test_admin_can_add_list_and_email_organizers(tmp_path):
     assert b"mailto:deemah@example.com" in detail.data
     assert b"ali@example.com" in detail.data
     assert code[:4].encode() in detail.data
-    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "organizer_added"
+    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "host_added"
 
 
 def test_admin_organizer_email_is_validated(tmp_path):
@@ -690,7 +690,7 @@ def test_admin_can_remove_an_organizer(tmp_path):
 
     assert response.status_code == 303
     assert indexing.list_organizers("gala") == []
-    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "organizer_removed"
+    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "host_removed"
 
 
 def test_admin_photo_import_has_no_total_selection_limit_and_uses_safe_batches(tmp_path):
