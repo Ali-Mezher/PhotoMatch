@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 import shutil
 from datetime import date
 from pathlib import Path
@@ -24,10 +25,17 @@ from .models import (
     ImageIndexStatus,
     IndexProgress,
     IndexStatus,
+    Organizer,
 )
 from .status_store import StatusStore
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+# Pragmatic email shape check: a local part, an "@", and a dotted domain, with
+# no spaces. Deliberately permissive — the real check is that the operator can
+# send to it.
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+MAX_ORGANIZER_NAME_LENGTH = 120
+MAX_ORGANIZER_EMAIL_LENGTH = 254
 
 
 class IndexingService:
@@ -150,6 +158,29 @@ class IndexingService:
         if not held:
             self._control.clear(event_id)
         return held
+
+    def add_organizer(self, event_id: str, name: str, email: str) -> Organizer:
+        """Attach a responsible person (name + email) to an event."""
+        event_id = self._require_registered_event(event_id)
+        name = (name or "").strip()
+        email = (email or "").strip()
+        if not name:
+            raise ValueError("Organizer name is required.")
+        if len(name) > MAX_ORGANIZER_NAME_LENGTH:
+            raise ValueError(
+                f"Organizer name must be {MAX_ORGANIZER_NAME_LENGTH} characters or fewer."
+            )
+        if len(email) > MAX_ORGANIZER_EMAIL_LENGTH or not _EMAIL_PATTERN.match(email):
+            raise ValueError("Enter a valid email address.")
+        return self.store.add_organizer(event_id, name, email)
+
+    def list_organizers(self, event_id: str) -> list[Organizer]:
+        event_id = self._require_registered_event(event_id)
+        return self.store.list_organizers(event_id)
+
+    def remove_organizer(self, event_id: str, organizer_id: int) -> bool:
+        event_id = self._require_registered_event(event_id)
+        return self.store.remove_organizer(event_id, organizer_id)
 
     def reconcile_registered_events(self) -> list[str]:
         """Queue changed registered events during startup without polling.
