@@ -15,6 +15,24 @@
     const label = indexProgress.querySelector("[data-progress-label]");
     const percent = indexProgress.querySelector("[data-progress-percent]");
     const bar = indexProgress.querySelector("[data-progress-bar]");
+    // Server-rendered regions kept in sync while indexing runs, so per-photo
+    // statuses and counts advance live without a disruptive full-page reload
+    // (which would wipe the organizer form or an in-progress search).
+    const liveRegions = ["[data-live-summary]", "[data-live-inventory]", "[data-live-pending]"];
+    const refreshLiveRegions = async () => {
+      try {
+        const pageResponse = await fetch(window.location.href, { cache: "no-store" });
+        if (!pageResponse.ok) return;
+        const doc = new DOMParser().parseFromString(await pageResponse.text(), "text/html");
+        liveRegions.forEach((selector) => {
+          const fresh = doc.querySelector(selector);
+          const current = document.querySelector(selector);
+          if (fresh && current) current.innerHTML = fresh.innerHTML;
+        });
+      } catch (_error) {
+        // A transient refresh failure is non-fatal; the next tick retries.
+      }
+    };
     const refreshProgress = async () => {
       try {
         const response = await fetch(indexProgress.dataset.url, {
@@ -27,7 +45,8 @@
         bar.value = result.percent;
         label.textContent = result.status === "queued" ? "Waiting" : "Indexing";
         if (result.status === "queued" || result.status === "indexing") {
-          window.setTimeout(refreshProgress, 1000);
+          await refreshLiveRegions();
+          window.setTimeout(refreshProgress, 1200);
         } else {
           const labels = { indexed: "Complete", paused: "Paused", stopped: "Stopped" };
           label.textContent = labels[result.status] || "Stopped";

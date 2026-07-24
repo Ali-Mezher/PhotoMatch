@@ -35,6 +35,8 @@ code{overflow-wrap:anywhere}.notice{min-width:0}.status{justify-self:start}
 .danger-zone .eyebrow{margin:0 0 6px;color:var(--red)}
 .delete-event-form{display:grid;grid-template-columns:minmax(260px,1fr) auto;align-items:end;gap:14px}
 .delete-event-form label{display:grid;gap:7px;font-weight:680}
+.organizer-form{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,1.4fr) auto;align-items:end;gap:14px;margin-top:16px}
+.organizer-form label{display:grid;gap:7px;font-weight:680}
 .button-danger{color:#fff;background:var(--red);border-color:var(--red)}
 .button-danger:hover{background:#842f2f;border-color:#842f2f}
-@media(max-width:700px){.delete-event-form{grid-template-columns:1fr}}
+@media(max-width:700px){.delete-event-form,.organizer-form{grid-template-columns:1fr}}

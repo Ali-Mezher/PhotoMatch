@@ -56,6 +56,17 @@ class EventSummary:
 
 
 @dataclass(frozen=True)
+class Organizer:
+    """A person responsible for an event, reachable at ``email``."""
+
+    id: int
+    event_id: str
+    name: str
+    email: str
+    created_at: str | None = None
+
+
+@dataclass(frozen=True)
 class ImageIndexOutcome:
     photo_path: str
     status: IndexStatus

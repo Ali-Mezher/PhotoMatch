@@ -553,6 +553,10 @@ def test_admin_event_page_reports_live_index_percentage(tmp_path):
     }
     assert b'data-index-progress' in detail.data
     assert b">50%</strong>" in detail.data
+    # Live-refresh hooks so per-photo statuses and counts advance without a reload.
+    assert b"data-live-summary" in detail.data
+    assert b"data-live-inventory" in detail.data
+    assert b"data-live-pending" in detail.data
 
 
 def _queued_event(app, event_id="hold-event", photo_count=2):
@@ -624,6 +628,69 @@ def test_pause_unknown_event_returns_404(tmp_path):
     )
 
     assert response.status_code == 404
+
+
+def test_admin_can_add_list_and_email_organizers(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    _indexed_event(app, event_id="gala", display_name="Summer Gala")
+
+    added = client.post(
+        "/admin/events/gala/organizers",
+        data={"_csrf_token": _csrf(client), "name": "Deemah", "email": "deemah@example.com"},
+    )
+    client.post(
+        "/admin/events/gala/organizers",
+        data={"_csrf_token": _csrf(client), "name": "Ali", "email": "ali@example.com"},
+    )
+
+    assert added.status_code == 303
+    assert added.location.endswith("#hosts")
+    detail = client.get("/admin/events/gala")
+    assert b"Deemah" in detail.data
+    assert b"ali@example.com" in detail.data
+    # The "Email attendee code" mailto addresses both organizers and carries
+    # the event's access code.
+    code = app.extensions["indexing_service"].get_event_access_code("gala")
+    assert b"mailto:deemah@example.com" in detail.data
+    assert b"ali@example.com" in detail.data
+    assert code[:4].encode() in detail.data
+    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "host_added"
+
+
+def test_admin_organizer_email_is_validated(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    _indexed_event(app, event_id="gala")
+
+    response = client.post(
+        "/admin/events/gala/organizers",
+        data={"_csrf_token": _csrf(client), "name": "Hessah", "email": "nope"},
+    )
+
+    assert response.status_code == 400
+    assert b"valid email" in response.data
+    assert app.extensions["indexing_service"].list_organizers("gala") == []
+
+
+def test_admin_can_remove_an_organizer(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    _indexed_event(app, event_id="gala")
+    indexing = app.extensions["indexing_service"]
+    organizer = indexing.add_organizer("gala", "Deemah", "deemah@example.com")
+
+    response = client.post(
+        f"/admin/events/gala/organizers/{organizer.id}/delete",
+        data={"_csrf_token": _csrf(client)},
+    )
+
+    assert response.status_code == 303
+    assert indexing.list_organizers("gala") == []
+    assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "host_removed"
 
 
 def test_admin_photo_import_has_no_total_selection_limit_and_uses_safe_batches(tmp_path):
