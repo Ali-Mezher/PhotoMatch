@@ -10,6 +10,7 @@ from collections import defaultdict
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import quote
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from flask import (
@@ -273,6 +274,42 @@ def delete_event(event_id: str):
     )
     flash(f'Event "{display_name}" was permanently deleted.', "success")
     return redirect(url_for("admin.overview"), code=303)
+
+
+@admin.post("/events/<event_id>/organizers")
+@admin_required
+def add_organizer(event_id: str):
+    _get_event_or_404(event_id)
+    try:
+        organizer = _indexing().add_organizer(
+            event_id, request.form.get("name", ""), request.form.get("email", "")
+        )
+    except ValueError as exc:
+        return _render_event_detail(event_id, organizer_error=str(exc), status=400)
+    _admin_store().record_audit(
+        "organizer_added", event_id, name=organizer.name, email=organizer.email
+    )
+    flash(f"Added {organizer.name} as an organizer.", "success")
+    return redirect(
+        url_for("admin.event_detail", event_id=event_id) + "#organizers", code=303
+    )
+
+
+@admin.post("/events/<event_id>/organizers/<int:organizer_id>/delete")
+@admin_required
+def remove_organizer(event_id: str, organizer_id: int):
+    _get_event_or_404(event_id)
+    removed = _indexing().remove_organizer(event_id, organizer_id)
+    if removed:
+        _admin_store().record_audit(
+            "organizer_removed", event_id, organizer_id=organizer_id
+        )
+        flash("Organizer removed.", "success")
+    else:
+        flash("That organizer was already removed.", "error")
+    return redirect(
+        url_for("admin.event_detail", event_id=event_id) + "#organizers", code=303
+    )
 
 
 @admin.post("/events/<event_id>/search")
@@ -747,10 +784,13 @@ def _render_event_detail(
     search=None,
     search_error: str | None = None,
     delete_error: str | None = None,
+    organizer_error: str | None = None,
     status: int = 200,
 ):
     event = _get_event_or_404(event_id)
     index_progress = _indexing().get_index_progress(event_id)
+    access_code = _indexing().get_event_access_code(event_id)
+    organizers = _indexing().list_organizers(event_id)
     if search is None and search_token:
         search = result_store().get(search_token)
         if search is None:
@@ -762,7 +802,10 @@ def _render_event_detail(
             "admin/event_detail.html",
             event=event,
             images=_indexing().list_image_statuses(event_id),
-            access_code=_indexing().get_event_access_code(event_id),
+            access_code=access_code,
+            organizers=organizers,
+            organizer_mailto=_organizer_mailto(event, access_code, organizers),
+            organizer_error=organizer_error,
             cluster=_admin_store().latest_cluster(event_id),
             cluster_stale=_cluster_is_stale(event_id),
             search=search,
@@ -772,6 +815,37 @@ def _render_event_detail(
             index_progress=index_progress,
         ),
         status,
+    )
+
+
+def _format_access_code(access_code: str) -> str:
+    """Group an 8-char code as ``XXXX-XXXX`` for humans; codes ignore dashes."""
+    if len(access_code) == 8:
+        return f"{access_code[:4]}-{access_code[4:]}"
+    return access_code
+
+
+def _organizer_mailto(event, access_code: str, organizers) -> str | None:
+    """Build a ``mailto:`` link addressed to all organizers with the code.
+
+    The operator's own mail client opens pre-filled; the app never sends mail
+    itself, so no SMTP credentials are involved.
+    """
+    if not organizers:
+        return None
+    title = event.display_name or event.event_id
+    recipients = ",".join(organizer.email for organizer in organizers)
+    subject = f'PhotoMatch attendee code for "{title}"'
+    body = (
+        f"Hi,\n\n"
+        f'Here is the attendee access code for "{title}" ({event.event_date}):\n\n'
+        f"    {_format_access_code(access_code)}\n\n"
+        "Attendees enter this code on the PhotoMatch page to find their photos.\n\n"
+        "Thanks"
+    )
+    return (
+        f"mailto:{quote(recipients, safe='@,')}"
+        f"?subject={quote(subject)}&body={quote(body)}"
     )
 
 
