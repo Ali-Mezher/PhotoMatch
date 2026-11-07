@@ -4,10 +4,9 @@ Local face recognition for instant event-photo retrieval — built for
 Golden Camera, a photography business shooting weddings, corporate
 events, and school/university graduations.
 
-Students currently spend 5–6 hours manually searching 10,000+ photos per
-event to find themselves. PhotoMatch lets attendees complete a live selfie check and get
-their photos back in seconds — running entirely on local hardware, no
-cloud upload, no per-event cost.
+Customers currently wait while staff manually search large event collections.
+PhotoMatch lets an authorized shop worker take or upload a customer photo and
+retrieve matching event photographs in seconds—entirely on controlled hardware.
 
 CPEG 418 — Computer Vision — American University of Kuwait — Summer 2026.
 Full write-up: [`PhotoMatch_Proposal.pdf`](PhotoMatch_Proposal.pdf).
@@ -16,10 +15,19 @@ Final deliverables: [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) and
 
 ## Status
 
-Week 4 of 4 — evaluation & validation tooling is built and tested;
-running it against real event photos to produce final numbers is the
-remaining work. Weeks 1–3 (proposal through interface) are done. See
-[`ROADMAP.md`](ROADMAP.md) for the full task breakdown and owners.
+The core pipeline, staff dashboard, central event storage, GPU-to-CPU fallback,
+threshold experiments, clustering review, reindex controls, deployment
+packaging, and company-network allowlist are implemented. The next milestone is
+a private offline pilot on the owner's work PC. Worker accounts, Admin/Worker
+roles, and private LAN sharing follow only if that pilot is approved. See
+[`ROADMAP.md`](ROADMAP.md) for completed work, rollout gates, and remaining
+tasks.
+
+For the first private Windows trial, follow
+[`docs/OWNER_PILOT.md`](docs/OWNER_PILOT.md). The provided setup prepares the
+face models, verifies they reopen with network sockets blocked, encrypts the
+owner credentials for the current Windows account, and creates a loopback-only
+launcher.
 
 ## Pipeline
 
@@ -87,18 +95,17 @@ source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-The public attendee interface uses Flask. Launch it locally with:
+The staff-only application uses Flask. Launch it locally with:
 
 ```bash
 python -m src.web
 ```
 
-Then open `http://127.0.0.1:5000`. The server binds to localhost in this
-development entry point. Attendees enter the 8-character code printed by the event's
-index command; events are not listed on the public page. Public biometric search requires
-camera access and a randomized 3-step head-turn check. Attendees who cannot or prefer not
-to use it can ask staff for manual lookup. Camera frames and embeddings stay in memory and
-are not saved. The existing desktop interface
+Then open `http://127.0.0.1:5000`. The root redirects to the authenticated staff
+dashboard. A worker selects an event, adds its photographs, waits for processing,
+and takes or uploads a customer photo to retrieve matches. Public event-code and
+selfie routes are disabled. Lookup photos and embeddings stay in memory and are
+not saved. The existing desktop interface
 (`src/interface/`) remains available during web-interface review and uses Tkinter, which
 ships with Python on Windows and macOS. On Linux you may need to install it separately:
 ```bash
@@ -110,7 +117,7 @@ Full contributor workflow (branching, PRs, review): see
 
 ### Operator dashboard
 
-The authenticated local dashboard is available at `http://127.0.0.1:5000/admin/`.
+The authenticated dashboard is available at `http://127.0.0.1:5000/admin/`.
 Before starting the app, configure one operator account and a stable Flask secret for
 the current PowerShell session:
 
@@ -122,10 +129,9 @@ python -m src.web
 ```
 
 The dashboard creates events, imports JPG/PNG photos, queues incremental indexing,
-shows live per-event indexing progress and attendee codes, controls a validated subset of search settings, and runs
-review-only identity clustering. Each event page can also run an in-memory person
-search without re-entering the attendee code. The event inventory supports filtering
-by name, internal ID, attendee code, or date, with configurable page sizes for larger
+shows live per-event processing progress, controls validated search settings, and runs
+review-only identity clustering. Each event page runs an in-memory staff-assisted
+customer search. The event inventory supports filtering with configurable page sizes for larger
 catalogs. The overview shows the 5 latest audit entries, with a separate 25/50/100-row
 activity history. The worker is interrupt-driven and serializes indexing and clustering; it
 never scans on a timer. Set
@@ -135,6 +141,8 @@ Debug mode is off by default and can be explicitly enabled for local development
 
 See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for every supported environment
 variable, its default, and standard local, paused-worker, debug, and HTTPS examples.
+Production Docker, GPU, backup, upgrade, and rollback instructions are in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Running the tests
 
@@ -159,7 +167,7 @@ Once you have real (or stand-in) photos locally under
 # Run preprocess -> detect -> embed on a single photo:
 python scripts/demo_pipeline.py path/to/photo.jpg
 
-# First index run (registers the event date and prints its attendee code):
+# First index run (registers the event date and prepares its photographs):
 python scripts/demo_goated_index_and_search.py index my_event --date 2026-07-01
 
 # Later runs process only newly added photos:
@@ -173,6 +181,9 @@ python scripts/demo_goated_index_and_search.py search my_event path/to/selfie.jp
 
 # Tune thresholds from labeled genuine/impostor similarity scores:
 python scripts/tune_thresholds.py path/to/scores.csv
+
+# Compare matching and clustering threshold grids and write CSV/Markdown reports:
+python scripts/experiment_thresholds.py --matching-csv scores.csv --possible-range 0.50:0.70:0.05 --confident-range 0.65:0.85:0.05
 
 # Or launch the full kiosk app:
 python -m src.interface.app
@@ -221,6 +232,10 @@ score,label
 
 The tool reports FAR and FRR and recommends values for `config.py`; it
 does not change production thresholds automatically.
+
+For configurable matching and identity-group grids, CSV/Markdown output, false
+merge ranking, and input formats, see
+[`docs/THRESHOLD_EXPERIMENTS.md`](docs/THRESHOLD_EXPERIMENTS.md).
 
 ## Data & privacy
 

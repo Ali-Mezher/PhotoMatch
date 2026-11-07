@@ -1,9 +1,8 @@
 """
 Issue #13/#16 support — loads a hand-built evaluation set from disk.
 
-This is the piece that makes evaluation "just drop photos in a folder,
-no code or CSV editing" — everything below reads a fixed folder
-convention that the team builds by hand:
+This is the piece that makes retrieval evaluation start with photos in a fixed
+folder convention rather than hand-authored score CSVs:
 
     data/events/<event_id>/raw/                  (already exists — the
                                                     real event photos,
@@ -12,8 +11,8 @@ convention that the team builds by hand:
 
     data/evaluation/<event_id>/identities/
         <person_name>/
-            selfie/      exactly ONE image — the selfie used as the
-                          search query for this person.
+            selfie/      one or more independent shop-style selfies used
+                          as search queries for this person.
             matches/     copies of every raw/ photo that actually shows
                           this person. Filenames MUST match the
                           corresponding file in data/events/<event_id>/raw/
@@ -45,7 +44,7 @@ class Identity:
     """One person in an evaluation set."""
 
     name: str
-    selfie_path: Path
+    selfie_paths: tuple[Path, ...]
     # Filenames (not full paths) — the raw/ photos that actually show
     # this person, used as ground truth for precision/recall.
     ground_truth_filenames: set[str]
@@ -75,8 +74,8 @@ def load_evaluation_set(event_id: str) -> EvaluationSet:
         FileNotFoundError: if the event's raw/ photos or identities/
             folder don't exist yet — the team hasn't set this event up
             for evaluation.
-        ValueError: if an identity folder is malformed (no selfie,
-            more than one selfie, or no ground-truth photos) — this is
+        ValueError: if an identity folder is malformed (no selfie or no
+            ground-truth photos) — this is
             almost always a mistake in how photos were dropped in, so
             it's raised loudly rather than silently skipped.
     """
@@ -98,10 +97,10 @@ def load_evaluation_set(event_id: str) -> EvaluationSet:
     identities = []
     for person_dir in sorted(p for p in identities_dir.iterdir() if p.is_dir()):
         selfie_images = _find_images(person_dir / EVAL_SELFIE_SUBDIR)
-        if len(selfie_images) != 1:
+        if not selfie_images:
             raise ValueError(
-                f"'{person_dir.name}': expected exactly one image in "
-                f"{person_dir / EVAL_SELFIE_SUBDIR}, found {len(selfie_images)}."
+                f"'{person_dir.name}': expected at least one image in "
+                f"{person_dir / EVAL_SELFIE_SUBDIR}, found none."
             )
 
         match_images = _find_images(person_dir / EVAL_MATCHES_SUBDIR)
@@ -127,7 +126,7 @@ def load_evaluation_set(event_id: str) -> EvaluationSet:
         identities.append(
             Identity(
                 name=person_dir.name,
-                selfie_path=selfie_images[0],
+                selfie_paths=tuple(selfie_images),
                 ground_truth_filenames={m.name for m in match_images},
             )
         )

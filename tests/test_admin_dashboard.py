@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from zipfile import ZipFile
 
 from PIL import Image
+from src.detection.device import ComputeDeviceStatus
 from src.services.admin_store import AdminStore, RuntimeSettings
 from src.services.models import ImageIndexOutcome, IndexStatus
 from src.services.status_store import StatusStore
@@ -24,6 +25,9 @@ def _app(tmp_path, **overrides):
             "ADMIN_USERNAME": "operator",
             "ADMIN_PASSWORD": "correct horse",
             "ADMIN_START_WORKER": False,
+            "COMPUTE_DEVICE_STATUS_PROVIDER": lambda: ComputeDeviceStatus(
+                "cpu", "CPU mode", "/CPU:0", detail="test environment"
+            ),
         }
     config.update(overrides)
     return create_app(config)
@@ -64,6 +68,40 @@ def _indexed_event(app, event_id="ready-event", display_name="Ready Event"):
     return match
 
 
+def test_event_page_has_visible_cluster_results_button(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    _indexed_event(app)
+    store = app.extensions["admin_store"]
+    run = store.queue_cluster("ready-event", 0.70, 2, 0.68)
+    store.complete_cluster(run.run_id, "test-generation", [])
+
+    response = client.get("/admin/events/ready-event")
+
+    assert response.status_code == 200
+    assert b"Clustered face groups" in response.data
+    assert b"View clustered groups" in response.data
+    assert (
+        f'/admin/events/ready-event/clusters/{run.run_id}'.encode()
+        in response.data
+    )
+
+
+def test_event_page_explains_how_to_create_first_cluster_result(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    _indexed_event(app)
+
+    response = client.get("/admin/events/ready-event")
+
+    assert response.status_code == 200
+    assert b"No groups created yet" in response.data
+    assert b"Create clustered groups" in response.data
+    assert b"View clustered groups" not in response.data
+
+
 def test_admin_requires_login_and_accepts_configured_credentials(tmp_path):
     client = _app(tmp_path).test_client()
 
@@ -75,6 +113,19 @@ def test_admin_requires_login_and_accepts_configured_credentials(tmp_path):
     assert response.status_code == 303
     assert response.location.endswith("/admin/")
     assert client.get("/admin/").status_code == 200
+
+
+def test_staff_only_root_redirects_and_public_routes_are_not_registered(tmp_path):
+    client = _app(tmp_path).test_client()
+    assert client.get("/").location.endswith("/admin/login")
+    assert client.post("/event-access").status_code == 404
+    assert client.get("/healthz").get_json() == {
+        "status": "ok",
+        "service": "photomatch",
+    }
+
+    _login(client)
+    assert client.get("/").location.endswith("/admin/")
 
 
 def test_admin_rejects_bad_credentials_and_missing_csrf(tmp_path):
@@ -463,10 +514,10 @@ def test_inline_admin_search_uses_event_without_code_and_scopes_results(tmp_path
         content_type="multipart/form-data",
     )
 
-    assert b"Search for a person" in detail.data
+    assert b"Photograph the customer" in detail.data
     assert b"event code" not in detail.data.lower()
     assert b"consent" not in detail.data.lower()
-    assert b"No attendee code required" in detail.data
+    assert b"Ready to search" in detail.data
     assert b"Hang tight" in detail.data
     assert response.status_code == 303
     assert response.location.startswith("/admin/events/ready-event?search_token=")
@@ -557,6 +608,27 @@ def test_admin_event_page_reports_live_index_percentage(tmp_path):
     assert b"data-live-summary" in detail.data
     assert b"data-live-inventory" in detail.data
     assert b"data-live-pending" in detail.data
+
+
+def test_ready_event_page_always_offers_and_queues_full_reindex(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    _login(client)
+    _indexed_event(app)
+    store = app.extensions["indexing_service"].store
+
+    page = client.get("/admin/events/ready-event")
+    retried = client.post(
+        "/admin/events/ready-event/restart-index",
+        data={"_csrf_token": _csrf(client)},
+    )
+
+    assert page.status_code == 200
+    assert b"Try indexing again" in page.data
+    assert b"Threshold-only changes do not require reindexing" in page.data
+    assert retried.status_code == 303
+    assert store.get_event("ready-event").status is IndexStatus.QUEUED
+    assert store.claim_next_event() == ("ready-event", True)
 
 
 def _queued_event(app, event_id="hold-event", photo_count=2):
@@ -650,12 +722,9 @@ def test_admin_can_add_list_and_email_organizers(tmp_path):
     detail = client.get("/admin/events/gala")
     assert b"Deemah" in detail.data
     assert b"ali@example.com" in detail.data
-    # The "Email attendee code" mailto addresses both organizers and carries
-    # the event's access code.
-    code = app.extensions["indexing_service"].get_event_access_code("gala")
+    # Contact email links remain available without exposing a retired attendee code.
     assert b"mailto:deemah@example.com" in detail.data
     assert b"ali@example.com" in detail.data
-    assert code[:4].encode() in detail.data
     assert app.extensions["admin_store"].recent_audit(1)[0]["action"] == "host_added"
 
 
@@ -710,7 +779,7 @@ def test_admin_photo_import_has_no_total_selection_limit_and_uses_safe_batches(t
     )
     detail = client.get("/admin/events/unlimited-uploads")
 
-    assert b"Select any number" in detail.data
+    assert b"Large selections are uploaded safely" in detail.data
     assert b"20 photos per upload" not in detail.data
     assert "MAX_FILES_PER_BATCH = 10" in script
     assert "MAX_BATCH_BYTES = 200 * 1024 * 1024" in script

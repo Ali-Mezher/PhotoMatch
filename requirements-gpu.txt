@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Linux/NVIDIA optional runtime. Install only on a host with a supported
+# NVIDIA driver; the application still falls back to CPU if CUDA is unusable.
+tensorflow[and-cuda]>=2.21.0,<2.22

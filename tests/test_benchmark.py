@@ -31,6 +31,9 @@ class FakeIndex:
     def search(self, query_embedding, k=50):
         return self._scores, self._metadata
 
+    def __len__(self):
+        return len(self._metadata)
+
 
 @pytest.fixture
 def one_identity_eval_set():
@@ -40,7 +43,7 @@ def one_identity_eval_set():
         identities=[
             Identity(
                 name="alice",
-                selfie_path=Path("/fake/alice_selfie.jpg"),
+                selfie_paths=(Path("/fake/alice_selfie.jpg"),),
                 ground_truth_filenames={"photo1.jpg", "photo2.jpg"},
             )
         ],
@@ -82,6 +85,7 @@ def test_run_benchmark_computes_metrics_and_labels_scores(monkeypatch, one_ident
 
     alice_result = result.identity_results[0]
     assert alice_result.name == "alice"
+    assert alice_result.selfie_filename == "alice_selfie.jpg"
     # photo1.jpg and photo2.jpg are her ground truth; other.jpg is not
     assert alice_result.metrics.num_retrieved_relevant == 2
     assert alice_result.metrics.num_relevant == 2
@@ -90,6 +94,45 @@ def test_run_benchmark_computes_metrics_and_labels_scores(monkeypatch, one_ident
     # scores for her ground-truth photos go to genuine, the rest to impostor
     assert sorted(result.genuine_scores) == [0.7, 0.9]
     assert result.impostor_scores == [0.8]
+    assert len(result.score_observations) == 3
+    assert result.score_observations[0].genuine is True
+
+
+def test_run_benchmark_evaluates_every_selfie(monkeypatch, one_identity_eval_set):
+    identity = one_identity_eval_set.identities[0]
+    identity.selfie_paths = (
+        Path("/fake/alice_front.jpg"),
+        Path("/fake/alice_side.jpg"),
+    )
+    fake_face = FakeFace((0, 0, 10, 10), 0.99, np.ones(8))
+    fake_index = FakeIndex(
+        [0.9],
+        [IndexedFace("/fake/raw/photo1.jpg", (0, 0, 5, 5), 0.9)],
+    )
+    monkeypatch.setattr(
+        "src.evaluation.benchmark.load_evaluation_set", lambda event_id: one_identity_eval_set
+    )
+    monkeypatch.setattr(
+        "src.evaluation.benchmark.load_event_index", lambda event_id: fake_index
+    )
+    monkeypatch.setattr(
+        "src.evaluation.benchmark.detect_and_embed", lambda image: [fake_face]
+    )
+    monkeypatch.setattr("src.evaluation.benchmark.preprocess_image", lambda image: image)
+    monkeypatch.setattr(
+        "src.evaluation.benchmark.cv2.imread",
+        lambda path: np.zeros((10, 10, 3), dtype=np.uint8),
+    )
+    monkeypatch.setattr("src.evaluation.benchmark._warm_up_models", lambda: None)
+
+    result = run_benchmark("grad2026")
+
+    assert result.identity_count == 1
+    assert result.query_count == 2
+    assert [item.selfie_filename for item in result.identity_results] == [
+        "alice_front.jpg",
+        "alice_side.jpg",
+    ]
 
 
 def test_run_benchmark_raises_when_selfie_has_no_face(monkeypatch, one_identity_eval_set):

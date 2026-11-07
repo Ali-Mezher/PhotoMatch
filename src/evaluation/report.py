@@ -54,17 +54,18 @@ def generate_report(
 
 def _add_retrieval_section(lines: list[str], benchmark: BenchmarkResult) -> None:
     lines.append("## Retrieval accuracy — Issue #13")
-    lines.append(f"- Identities evaluated: {len(benchmark.identity_results)}")
+    lines.append(f"- Identities evaluated: {benchmark.identity_count}")
+    lines.append(f"- Independent selfie queries: {benchmark.query_count}")
     lines.append(f"- Mean precision@{benchmark.k}: {benchmark.mean_precision:.1%}")
     lines.append(f"- Mean recall@{benchmark.k}: {benchmark.mean_recall:.1%}")
     lines.append(f"- Mean query time: {benchmark.mean_query_time_seconds:.2f}s")
     lines.append("")
-    lines.append("| Identity | Precision@k | Recall@k | Query time (s) | Top score |")
-    lines.append("|---|---|---|---|---|")
+    lines.append("| Identity | Selfie | Precision@k | Recall@k | Query time (s) | Top score |")
+    lines.append("|---|---|---|---|---|---|")
     for r in benchmark.identity_results:
         top = f"{r.top_score:.3f}" if r.top_score is not None else "—"
         lines.append(
-            f"| {r.name} | {r.metrics.precision_at_k:.1%} | "
+            f"| {r.name} | {r.selfie_filename or '—'} | {r.metrics.precision_at_k:.1%} | "
             f"{r.metrics.recall_at_k:.1%} | {r.query_time_seconds:.2f} | {top} |"
         )
     lines.append("")
@@ -84,9 +85,8 @@ def _add_threshold_section(
             f"FAR {possible.far:.2%}, FRR {possible.frr:.2%}"
         )
         lines.append(
-            "- Update `config.py`'s `CONFIDENT_MATCH_THRESHOLD` / "
-            "`POSSIBLE_MATCH_THRESHOLD` with these values once confirmed "
-            "across more than one event."
+            "- Treat these as calibration candidates. Confirm them on an "
+            "untouched event before entering them in Advanced settings."
         )
     else:
         lines.append(
@@ -124,7 +124,7 @@ def _add_robustness_review_section(lines: list[str], benchmark: BenchmarkResult)
     lines.append(
         "Precision/recall alone doesn't explain *why* a search underperformed "
         "— that needs a human look at the actual photos. These are the "
-        f"{ROBUSTNESS_REVIEW_COUNT} lowest-scoring identities from this run; "
+        f"{ROBUSTNESS_REVIEW_COUNT} lowest-scoring identity/selfie queries from this run; "
         "start there and note the likely cause (angle, lighting, occlusion, "
         "motion blur, group photo, etc.) for each."
     )
@@ -135,7 +135,8 @@ def _add_robustness_review_section(lines: list[str], benchmark: BenchmarkResult)
     ]
     for r in worst:
         lines.append(
-            f"- **{r.name}** — recall@{benchmark.k}: {r.metrics.recall_at_k:.1%} "
+            f"- **{r.name}** / {r.selfie_filename or 'query'} — "
+            f"recall@{benchmark.k}: {r.metrics.recall_at_k:.1%} "
             f"({r.metrics.num_retrieved_relevant}/{r.metrics.num_relevant} found). "
             f"Cause: _fill in after reviewing the photos_."
         )

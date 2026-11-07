@@ -1,0 +1,18 @@
+services:
+  photomatch:
+    build:
+      context: .
+      args:
+        REQUIREMENTS_FILE: requirements.txt
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - photomatch-data:/app/data
+      - photomatch-models:/app/models
+    restart: unless-stopped
+    stop_grace_period: 45s
+
+volumes:
+  photomatch-data:
+  photomatch-models:

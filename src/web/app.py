@@ -1,13 +1,21 @@
-"""Flask application factory for PhotoMatch's public attendee workflow."""
+"""Flask application factory for the staff-only PhotoMatch workflow."""
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import secrets
-import atexit
 from dataclasses import dataclass
 from datetime import timedelta
+from ipaddress import (
+    IPv4Address,
+    IPv4Network,
+    IPv6Address,
+    IPv6Network,
+    ip_address,
+    ip_network,
+)
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -20,8 +28,10 @@ from flask import (
     render_template,
     request,
     send_file,
+    session,
     url_for,
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import (
     EVENTS_DIR,
@@ -34,6 +44,7 @@ from src.indexing.build_index import (
     GENERATIONS_DIRNAME,
 )
 from src.indexing.faiss_index import INDEX_FILENAME, METADATA_FILENAME
+from src.detection.device import compute_device_status
 from src.matching import EventNotIndexedError, NoFaceDetectedError, match_selfie
 from src.services import IndexStatus
 from src.services.admin_store import AdminStore
@@ -60,6 +71,8 @@ from .search_results import (
     result_store,
 )
 
+_LOOPBACK_NETWORKS = "127.0.0.0/8,::1/128"
+
 
 @dataclass(frozen=True)
 class PublicEvent:
@@ -73,11 +86,21 @@ class PublicEvent:
 def create_app(test_config: dict | None = None) -> Flask:
     """Create a configured Flask application for production or tests."""
     app = Flask(__name__)
+    production = os.environ.get("PHOTOMATCH_ENV", "development").lower() == "production"
     app.config.from_mapping(
+        PRODUCTION=production,
+        STAFF_ONLY_MODE=True,
         SECRET_KEY=os.environ.get("PHOTOMATCH_SECRET_KEY") or secrets.token_hex(32),
-        MAX_CONTENT_LENGTH=12 * 1024 * 1024,
-        EVENTS_DIR=EVENTS_DIR,
-        INDEX_STATUS_DB=INDEX_STATUS_DB,
+        MAX_CONTENT_LENGTH=int(os.environ.get("PHOTOMATCH_MAX_UPLOAD_MB", "12"))
+        * 1024
+        * 1024,
+        EVENT_UPLOAD_MAX_BYTES=int(
+            os.environ.get("PHOTOMATCH_EVENT_UPLOAD_MB", "500")
+        )
+        * 1024
+        * 1024,
+        EVENTS_DIR=Path(os.environ.get("PHOTOMATCH_EVENTS_DIR", EVENTS_DIR)),
+        INDEX_STATUS_DB=Path(os.environ.get("PHOTOMATCH_INDEX_STATUS_DB", INDEX_STATUS_DB)),
         EVENT_ACCESS_TTL_SECONDS=30 * 60,
         EVENT_ACCESS_GATE=None,
         EVENT_ACCESS_RESOLVER=None,
@@ -92,17 +115,33 @@ def create_app(test_config: dict | None = None) -> Flask:
         ADMIN_PASSWORD=os.environ.get("PHOTOMATCH_ADMIN_PASSWORD"),
         ADMIN_START_WORKER=os.environ.get("PHOTOMATCH_BACKGROUND_WORKER", "1") == "1",
         ADMIN_DEBUG=os.environ.get("PHOTOMATCH_DEBUG", "0") == "1",
+        ALLOWED_NETWORKS=os.environ.get(
+            "PHOTOMATCH_ALLOWED_NETWORKS", _LOOPBACK_NETWORKS
+        ),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=os.environ.get("PHOTOMATCH_SECURE_COOKIE", "0") == "1",
+        SESSION_COOKIE_SECURE=os.environ.get(
+            "PHOTOMATCH_SECURE_COOKIE", "1" if production else "0"
+        )
+        == "1",
+        PREFERRED_URL_SCHEME="https" if production else "http",
         PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
         INDEXING_SERVICE=None,
         ADMIN_STORE=None,
         CLUSTERING_SERVICE=None,
         WORK_COORDINATOR=None,
+        COMPUTE_DEVICE_STATUS_PROVIDER=compute_device_status,
     )
     if test_config:
         app.config.update(test_config)
+    app.config["ALLOWED_NETWORKS"] = _parse_allowed_networks(
+        app.config["ALLOWED_NETWORKS"]
+    )
+    _validate_production_config(app)
+
+    if os.environ.get("PHOTOMATCH_TRUST_PROXY", "0") == "1":
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    register_network_access_control(app)
 
     if app.config["RESULT_STORE"] is None:
         app.config["RESULT_STORE"] = SearchResultStore(
@@ -152,6 +191,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     )
 
     app.add_template_filter(lambda value: Path(value).name, "basename")
+    app.add_template_filter(_friendly_status, "friendly_status")
 
     if app.config["MATCHER"] is match_selfie:
         def runtime_matcher(image, event_id):
@@ -179,12 +219,124 @@ def create_app(test_config: dict | None = None) -> Flask:
     return app
 
 
+def _validate_production_config(app: Flask) -> None:
+    """Fail early instead of starting an insecure production process."""
+    if not app.config.get("PRODUCTION") or app.config.get("TESTING"):
+        return
+    missing = [
+        variable
+        for variable, key in (
+            ("PHOTOMATCH_ADMIN_USERNAME", "ADMIN_USERNAME"),
+            ("PHOTOMATCH_ADMIN_PASSWORD", "ADMIN_PASSWORD"),
+            ("PHOTOMATCH_SECRET_KEY", "SECRET_KEY"),
+            ("PHOTOMATCH_ALLOWED_NETWORKS", "ALLOWED_NETWORKS"),
+        )
+        if not os.environ.get(variable) or not app.config.get(key)
+    ]
+    if missing:
+        raise RuntimeError(
+            "Production configuration is incomplete. Set: " + ", ".join(missing)
+        )
+    if len(str(app.config["SECRET_KEY"])) < 32:
+        raise RuntimeError("PHOTOMATCH_SECRET_KEY must contain at least 32 characters")
+    if str(app.config["SECRET_KEY"]).startswith("replace-with"):
+        raise RuntimeError("Replace the example PHOTOMATCH_SECRET_KEY before startup")
+    if len(str(app.config["ADMIN_PASSWORD"])) < 12:
+        raise RuntimeError("PHOTOMATCH_ADMIN_PASSWORD must contain at least 12 characters")
+    if str(app.config["ADMIN_PASSWORD"]).startswith("replace-with"):
+        raise RuntimeError("Replace the example PHOTOMATCH_ADMIN_PASSWORD before startup")
+    if not app.config.get("SESSION_COOKIE_SECURE"):
+        raise RuntimeError("Production requires PHOTOMATCH_SECURE_COOKIE=1")
+
+
+def _parse_allowed_networks(
+    value: str
+    | tuple[str | IPv4Network | IPv6Network, ...]
+    | list[str | IPv4Network | IPv6Network],
+) -> tuple[IPv4Network | IPv6Network, ...]:
+    """Normalize configured client IP addresses and CIDR ranges."""
+    entries = value.split(",") if isinstance(value, str) else value
+    networks: list[IPv4Network | IPv6Network] = []
+    for entry in entries:
+        if isinstance(entry, (IPv4Network, IPv6Network)):
+            networks.append(entry)
+            continue
+        candidate = str(entry).strip()
+        if not candidate:
+            continue
+        try:
+            networks.append(ip_network(candidate, strict=False))
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Invalid PHOTOMATCH_ALLOWED_NETWORKS entry: {candidate}"
+            ) from exc
+    if not networks:
+        raise RuntimeError("PHOTOMATCH_ALLOWED_NETWORKS must contain at least one IP or network")
+
+    # The service must remain reachable from its own host for container health
+    # checks and local administration. Loopback traffic cannot originate from a
+    # different computer, so adding it does not widen network access.
+    for loopback in _LOOPBACK_NETWORKS.split(","):
+        network = ip_network(loopback)
+        if network not in networks:
+            networks.append(network)
+    return tuple(networks)
+
+
+def _client_ip(value: str | None) -> IPv4Address | IPv6Address | None:
+    try:
+        address = ip_address(value) if value else None
+    except ValueError:
+        return None
+    if isinstance(address, IPv6Address) and address.ipv4_mapped:
+        return address.ipv4_mapped
+    return address
+
+
+def register_network_access_control(app: Flask) -> None:
+    """Reject requests that did not originate from an approved network."""
+    @app.before_request
+    def require_approved_network():
+        address = _client_ip(request.remote_addr)
+        allowed = app.config["ALLOWED_NETWORKS"]
+        if address is not None and any(address in network for network in allowed):
+            return None
+        app.logger.warning("Blocked a request from an unapproved network address")
+        return (
+            "PhotoMatch is available only from approved company computers.",
+            403,
+            {"Content-Type": "text/plain; charset=utf-8"},
+        )
+
+
+def _friendly_status(value) -> str:
+    raw = getattr(value, "value", value)
+    return {
+        "pending": "Waiting",
+        "queued": "Waiting",
+        "indexing": "Processing",
+        "running": "Processing",
+        "indexed": "Ready",
+        "complete": "Ready",
+        "paused": "Paused",
+        "stopped": "Stopped",
+        "failed": "Failed",
+        "no_face": "No face found",
+    }.get(str(raw), str(raw).replace("_", " ").title())
+
+
 def register_security_headers(app: Flask) -> None:
     @app.after_request
     def apply_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(self)")
+        response.headers.setdefault("Cache-Control", "no-store")
+        if app.config.get("PRODUCTION"):
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; img-src 'self' data: blob:; "
@@ -197,7 +349,21 @@ def register_security_headers(app: Flask) -> None:
 def register_routes(app: Flask) -> None:
     @app.get("/")
     def home():
+        if app.config["STAFF_ONLY_MODE"]:
+            endpoint = (
+                "admin.overview"
+                if session.get("admin_authenticated")
+                else "admin.login"
+            )
+            return redirect(url_for(endpoint), code=303)
         return _render_home()
+
+    @app.get("/healthz")
+    def healthcheck():
+        return {"status": "ok", "service": "photomatch"}
+
+    if app.config["STAFF_ONLY_MODE"]:
+        return
 
     @app.post("/event-access")
     def event_access():

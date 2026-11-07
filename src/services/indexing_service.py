@@ -115,6 +115,24 @@ class IndexingService:
     def force_rebuild(self, event_id: str) -> bool:
         return self.request_index(event_id, force_rebuild=True)
 
+    def restart_index(self, event_id: str) -> bool:
+        """Queue a full rebuild from any idle or operator-held state."""
+        event_id = self._require_registered_event(event_id)
+        event = self.get_event(event_id)
+        if event.status in {IndexStatus.QUEUED, IndexStatus.INDEXING}:
+            return False
+
+        self.reconcile_event(event_id)
+        self.store.require_rebuild(event_id)
+        self._control.clear(event_id)
+        if event.status in {IndexStatus.PAUSED, IndexStatus.STOPPED}:
+            queued = self.store.resume_event(event_id)
+        else:
+            queued = self.store.queue_event(event_id)
+        if queued:
+            self._manager.signal()
+        return queued
+
     def retry_failed(self, event_id: str) -> int:
         event_id = self._require_registered_event(event_id)
         count = self.store.retry_failed_images(event_id)

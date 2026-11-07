@@ -58,3 +58,42 @@ def test_cluster_labels_are_optional_and_replaceable(tmp_path):
     assert store.cluster_labels(run.run_id) == {0: "Speaker"}
     store.set_cluster_label(run.run_id, 0, "")
     assert store.cluster_labels(run.run_id) == {}
+
+
+def test_existing_admin_database_adds_cohesion_columns(tmp_path):
+    import sqlite3
+
+    database = tmp_path / "legacy-admin.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE runtime_settings (
+                singleton_id INTEGER PRIMARY KEY,
+                possible_threshold REAL NOT NULL,
+                confident_threshold REAL NOT NULL,
+                top_k INTEGER NOT NULL,
+                cluster_similarity REAL NOT NULL,
+                min_cluster_size INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO runtime_settings VALUES (1, 0.5, 0.65, 200, 0.7, 2, CURRENT_TIMESTAMP);
+            CREATE TABLE cluster_runs (
+                run_id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                index_generation TEXT,
+                similarity REAL NOT NULL,
+                min_cluster_size INTEGER NOT NULL,
+                cluster_count INTEGER NOT NULL DEFAULT 0,
+                noise_count INTEGER NOT NULL DEFAULT 0,
+                error TEXT,
+                requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                started_at TEXT,
+                completed_at TEXT
+            );
+            """
+        )
+
+    store = AdminStore(database)
+    assert store.get_settings().cluster_cohesion_similarity == 0.65
+    assert store.queue_cluster("legacy-event", 0.72, 2, 0.74).cohesion_similarity == 0.74

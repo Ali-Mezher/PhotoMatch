@@ -1,0 +1,8 @@
+services:
+  photomatch:
+    build:
+      args:
+        REQUIREMENTS_FILE: requirements-gpu.txt
+    environment:
+      PHOTOMATCH_COMPUTE_DEVICE: auto
+    gpus: all

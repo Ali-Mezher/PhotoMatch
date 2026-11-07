@@ -1,4 +1,7 @@
-# Attendee Liveness Evaluation
+# Attendee Liveness Evaluation (Legacy)
+
+> The production application is now staff-only, so these public liveness routes
+> are not registered. This document is retained as historical evaluation notes.
 
 Issue #21 adds a basic randomized head-turn check to the public attendee flow. It
 is a local deterrent against static-photo submissions, not production-grade identity

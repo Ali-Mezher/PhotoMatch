@@ -9,6 +9,11 @@ detect_and_embed() pipeline on one and sanity-checks the output.
 Run with: pytest tests/test_detection.py -v
 """
 
+import os
+import sys
+import types
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -70,6 +75,45 @@ class TestEmbeddingExtractor:
         extractor = EmbeddingExtractor()
         with pytest.raises(ValueError):
             extractor.get_embedding(np.array([]))
+
+    def test_loading_uses_the_persistent_photomatch_model_directory(
+        self, tmp_path, monkeypatch
+    ):
+        class FakeDeepFace:
+            pass
+
+        fake_module = types.ModuleType("deepface")
+        fake_module.DeepFace = FakeDeepFace
+        monkeypatch.setitem(sys.modules, "deepface", fake_module)
+        monkeypatch.delenv("DEEPFACE_HOME", raising=False)
+        monkeypatch.setattr("src.detection.embeddings.MODELS_DIR", tmp_path)
+        monkeypatch.setattr(
+            "src.detection.embeddings.configure_compute_device", lambda: None
+        )
+
+        extractor = EmbeddingExtractor()
+        extractor._ensure_loaded()
+
+        assert extractor._deepface is FakeDeepFace
+        assert Path(os.environ["DEEPFACE_HOME"]) == tmp_path.resolve()
+
+    def test_prepare_model_builds_the_configured_embedding_model(self, monkeypatch):
+        built_models = []
+
+        class FakeDeepFace:
+            @staticmethod
+            def build_model(model_name):
+                built_models.append(model_name)
+
+        extractor = EmbeddingExtractor(model_name="Facenet512")
+        extractor._deepface = FakeDeepFace
+        monkeypatch.setattr(
+            "src.detection.embeddings.run_tensorflow_operation", lambda fn: fn()
+        )
+
+        extractor.prepare_model()
+
+        assert built_models == ["Facenet512"]
 
     def test_get_embeddings_batch_skips_failures(self, monkeypatch):
         extractor = EmbeddingExtractor()

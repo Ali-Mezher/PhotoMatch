@@ -1,6 +1,6 @@
 <div class="admin-search-results">
   <div class="section-heading search-result-heading">
-    <div><h2>Search results</h2><p>{{ search.photos|length }} matching photo{% if search.photos|length != 1 %}s{% endif %}. Previews are watermarked; downloads are original files.</p></div>
+    <div><p class="eyebrow">Step 5</p><h2>Review and download matching photographs</h2><p>{{ search.photos|length }} matching photo{% if search.photos|length != 1 %}s{% endif %}. Previews are watermarked; downloads are original files.</p></div>
   </div>
   {% if search.photos %}
   <form action="{{ url_for('admin.search_export', event_id=event.event_id, token=search.token) }}" method="post" data-selection-form>

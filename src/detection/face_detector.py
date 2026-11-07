@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 from config import MIN_DETECTION_CONFIDENCE, MIN_FACE_SIZE_PX
+from .device import configure_compute_device, run_tensorflow_operation
 
 
 @dataclass
@@ -42,9 +43,14 @@ class FaceDetector:
 
     def _ensure_loaded(self):
         if self._detector is None:
+            configure_compute_device()
             from mtcnn import MTCNN  # deferred import — heavy, TF-backed
 
-            self._detector = MTCNN()
+            self._detector = run_tensorflow_operation(MTCNN)
+
+    def prepare_model(self) -> None:
+        """Load detector assets now so later inference can remain offline."""
+        self._ensure_loaded()
 
     def detect(self, image: np.ndarray) -> list[Detection]:
         """
@@ -68,7 +74,9 @@ class FaceDetector:
         self._ensure_loaded()
 
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        raw_results = self._detector.detect_faces(rgb_image)
+        raw_results = run_tensorflow_operation(
+            lambda: self._detector.detect_faces(rgb_image)
+        )
 
         detections = []
         for result in raw_results:

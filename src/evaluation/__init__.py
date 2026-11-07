@@ -19,7 +19,7 @@ PhotoMatch against real data:
 
 from .ground_truth import EvaluationSet, Identity, load_evaluation_set
 from .retrieval_metrics import RetrievalMetrics, precision_recall_at_k
-from .benchmark import BenchmarkResult, IdentityResult, run_benchmark
+from .benchmark import BenchmarkResult, IdentityResult, ScoreObservation, run_benchmark
 from .threshold_tuning import (
     ThresholdMetrics,
     evaluate_threshold,
@@ -34,6 +34,23 @@ from .scalability import (
     verify_offline_operation,
 )
 from .time_savings import TimeSavings, compute_time_savings
+from .threshold_experiments import (
+    ClassificationMetrics,
+    ClusteringGridResult,
+    MatchingGridResult,
+    classification_metrics,
+    evaluate_clustering_grid,
+    evaluate_matching_grid,
+    inclusive_grid,
+    save_threshold_artifacts,
+)
+from .exports import (
+    FaceLabelWorkspace,
+    LabeledEmbeddingExport,
+    export_labeled_embeddings,
+    prepare_face_label_workspace,
+    save_matching_scores,
+)
 from .report import generate_report, save_report
 
 __all__ = [
@@ -44,6 +61,7 @@ __all__ = [
     "precision_recall_at_k",
     "BenchmarkResult",
     "IdentityResult",
+    "ScoreObservation",
     "run_benchmark",
     "ThresholdMetrics",
     "evaluate_threshold",
@@ -58,4 +76,17 @@ __all__ = [
     "compute_time_savings",
     "generate_report",
     "save_report",
+    "ClassificationMetrics",
+    "MatchingGridResult",
+    "ClusteringGridResult",
+    "classification_metrics",
+    "evaluate_matching_grid",
+    "evaluate_clustering_grid",
+    "inclusive_grid",
+    "save_threshold_artifacts",
+    "FaceLabelWorkspace",
+    "LabeledEmbeddingExport",
+    "export_labeled_embeddings",
+    "prepare_face_label_workspace",
+    "save_matching_scores",
 ]

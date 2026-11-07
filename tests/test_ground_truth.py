@@ -45,10 +45,10 @@ class TestLoadEvaluationSet:
         _touch(evaluation_dir / "grad2026" / "identities" / "alice" / "matches" / "photo1.jpg")
         # no selfie/ folder for alice
 
-        with pytest.raises(ValueError, match="exactly one image"):
+        with pytest.raises(ValueError, match="at least one image"):
             load_evaluation_set("grad2026")
 
-    def test_raises_when_identity_has_two_selfies(self, wired_dirs):
+    def test_loads_multiple_selfies_for_one_identity(self, wired_dirs):
         events_dir, evaluation_dir = wired_dirs
         _touch(events_dir / "grad2026" / "raw" / "photo1.jpg")
         identity_dir = evaluation_dir / "grad2026" / "identities" / "alice"
@@ -56,8 +56,12 @@ class TestLoadEvaluationSet:
         _touch(identity_dir / "selfie" / "selfie2.jpg")
         _touch(identity_dir / "matches" / "photo1.jpg")
 
-        with pytest.raises(ValueError, match="exactly one image"):
-            load_evaluation_set("grad2026")
+        eval_set = load_evaluation_set("grad2026")
+
+        assert [path.name for path in eval_set.identities[0].selfie_paths] == [
+            "selfie1.jpg",
+            "selfie2.jpg",
+        ]
 
     def test_raises_when_no_matches(self, wired_dirs):
         events_dir, evaluation_dir = wired_dirs
@@ -102,7 +106,7 @@ class TestLoadEvaluationSet:
         assert len(eval_set.identities) == 2
 
         alice = next(i for i in eval_set.identities if i.name == "alice")
-        assert alice.selfie_path.name == "alice_selfie.jpg"
+        assert [path.name for path in alice.selfie_paths] == ["alice_selfie.jpg"]
         assert alice.ground_truth_filenames == {"photo1.jpg", "photo2.jpg"}
 
         bob = next(i for i in eval_set.identities if i.name == "bob")
