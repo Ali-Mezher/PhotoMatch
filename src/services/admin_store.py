@@ -16,6 +16,7 @@ class RuntimeSettings:
     top_k: int = 200
     cluster_similarity: float = 0.65
     min_cluster_size: int = 2
+    cluster_cohesion_similarity: float = 0.65
 
     def validate(self) -> "RuntimeSettings":
         if not 0 <= self.possible_threshold < self.confident_threshold <= 1:
@@ -25,7 +26,9 @@ class RuntimeSettings:
         if not 1 <= self.top_k <= 5000:
             raise ValueError("Search candidates must be between 1 and 5000.")
         if not 0.50 <= self.cluster_similarity <= 0.95:
-            raise ValueError("Cluster similarity must be between 0.50 and 0.95.")
+            raise ValueError("Group edge similarity must be between 0.50 and 0.95.")
+        if not 0.50 <= self.cluster_cohesion_similarity <= 0.95:
+            raise ValueError("Group cohesion similarity must be between 0.50 and 0.95.")
         if not 2 <= self.min_cluster_size <= 20:
             raise ValueError("Minimum cluster size must be between 2 and 20.")
         return self
@@ -38,6 +41,7 @@ class ClusterRun:
     status: str
     index_generation: str | None
     similarity: float
+    cohesion_similarity: float
     min_cluster_size: int
     cluster_count: int
     noise_count: int
@@ -82,6 +86,7 @@ class AdminStore:
                     top_k INTEGER NOT NULL,
                     cluster_similarity REAL NOT NULL,
                     min_cluster_size INTEGER NOT NULL,
+                    cluster_cohesion_similarity REAL NOT NULL DEFAULT 0.65,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
 
@@ -99,6 +104,7 @@ class AdminStore:
                     status TEXT NOT NULL,
                     index_generation TEXT,
                     similarity REAL NOT NULL,
+                    cohesion_similarity REAL NOT NULL DEFAULT 0.65,
                     min_cluster_size INTEGER NOT NULL,
                     cluster_count INTEGER NOT NULL DEFAULT 0,
                     noise_count INTEGER NOT NULL DEFAULT 0,
@@ -136,13 +142,32 @@ class AdminStore:
                 );
                 """
             )
+            runtime_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(runtime_settings)")
+            }
+            if "cluster_cohesion_similarity" not in runtime_columns:
+                connection.execute(
+                    "ALTER TABLE runtime_settings ADD COLUMN "
+                    "cluster_cohesion_similarity REAL NOT NULL DEFAULT 0.65"
+                )
+            run_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(cluster_runs)")
+            }
+            if "cohesion_similarity" not in run_columns:
+                connection.execute(
+                    "ALTER TABLE cluster_runs ADD COLUMN "
+                    "cohesion_similarity REAL NOT NULL DEFAULT 0.65"
+                )
             defaults = RuntimeSettings()
             connection.execute(
                 """
                 INSERT OR IGNORE INTO runtime_settings(
                     singleton_id, possible_threshold, confident_threshold,
-                    top_k, cluster_similarity, min_cluster_size
-                ) VALUES (1, ?, ?, ?, ?, ?)
+                    top_k, cluster_similarity, min_cluster_size,
+                    cluster_cohesion_similarity
+                ) VALUES (1, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     defaults.possible_threshold,
@@ -150,6 +175,7 @@ class AdminStore:
                     defaults.top_k,
                     defaults.cluster_similarity,
                     defaults.min_cluster_size,
+                    defaults.cluster_cohesion_similarity,
                 ),
             )
 
@@ -164,6 +190,7 @@ class AdminStore:
             top_k=row["top_k"],
             cluster_similarity=row["cluster_similarity"],
             min_cluster_size=row["min_cluster_size"],
+            cluster_cohesion_similarity=row["cluster_cohesion_similarity"],
         )
 
     def update_settings(self, settings: RuntimeSettings) -> RuntimeSettings:
@@ -174,6 +201,7 @@ class AdminStore:
                 UPDATE runtime_settings SET
                     possible_threshold = ?, confident_threshold = ?, top_k = ?,
                     cluster_similarity = ?, min_cluster_size = ?,
+                    cluster_cohesion_similarity = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE singleton_id = 1
                 """,
@@ -183,6 +211,7 @@ class AdminStore:
                     settings.top_k,
                     settings.cluster_similarity,
                     settings.min_cluster_size,
+                    settings.cluster_cohesion_similarity,
                 ),
             )
         return settings
@@ -222,17 +251,22 @@ class AdminStore:
         return int(row["total"])
 
     def queue_cluster(
-        self, event_id: str, similarity: float, min_cluster_size: int
+        self,
+        event_id: str,
+        similarity: float,
+        min_cluster_size: int,
+        cohesion_similarity: float = 0.65,
     ) -> ClusterRun:
         run_id = uuid4().hex
         with self._connect() as connection:
             connection.execute(
                 """
                 INSERT INTO cluster_runs(
-                    run_id, event_id, status, similarity, min_cluster_size
-                ) VALUES (?, ?, 'queued', ?, ?)
+                    run_id, event_id, status, similarity, cohesion_similarity,
+                    min_cluster_size
+                ) VALUES (?, ?, 'queued', ?, ?, ?)
                 """,
-                (run_id, event_id, similarity, min_cluster_size),
+                (run_id, event_id, similarity, cohesion_similarity, min_cluster_size),
             )
         return self.get_cluster_run(run_id)
 
@@ -392,6 +426,7 @@ class AdminStore:
             status=row["status"],
             index_generation=row["index_generation"],
             similarity=row["similarity"],
+            cohesion_similarity=row["cohesion_similarity"],
             min_cluster_size=row["min_cluster_size"],
             cluster_count=row["cluster_count"],
             noise_count=row["noise_count"],

@@ -71,6 +71,7 @@ def web_setup(tmp_path):
     app = create_app(
         {
             "TESTING": True,
+            "STAFF_ONLY_MODE": False,
             "SECRET_KEY": "test-secret",
             "EVENTS_DIR": events_dir,
             "INDEX_STATUS_DB": tmp_path / "status.sqlite3",
@@ -456,6 +457,7 @@ def test_default_catalog_uses_sql_status_and_codes(tmp_path):
     app = create_app(
         {
             "TESTING": True,
+            "STAFF_ONLY_MODE": False,
             "EVENTS_DIR": events_dir,
             "INDEX_STATUS_DB": database,
             "MATCHER": lambda image, event_id: {},
@@ -485,6 +487,7 @@ def test_default_catalog_rejects_an_unsafe_active_generation(tmp_path):
     app = create_app(
         {
             "TESTING": True,
+            "STAFF_ONLY_MODE": False,
             "EVENTS_DIR": events_dir,
             "INDEX_STATUS_DB": database,
             "MATCHER": lambda image, event_id: {},

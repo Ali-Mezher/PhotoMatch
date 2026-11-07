@@ -1,4 +1,4 @@
-"""Local-only development entry point: ``python -m src.web``."""
+"""Local staff-dashboard development entry point: ``python -m src.web``."""
 
 from . import create_app
 

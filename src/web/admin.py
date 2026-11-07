@@ -67,7 +67,7 @@ def csrf_token() -> str:
 @admin.before_request
 def protect_admin_requests():
     if request.endpoint == "admin.upload_photos":
-        request.max_content_length = 500 * 1024 * 1024
+        request.max_content_length = current_app.config["EVENT_UPLOAD_MAX_BYTES"]
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         supplied = request.form.get("_csrf_token") or request.headers.get("X-CSRF-Token")
         expected = session.get("csrf_token", "")
@@ -487,6 +487,24 @@ def index_event(event_id: str):
     return redirect(url_for("admin.event_detail", event_id=event_id), code=303)
 
 
+@admin.post("/events/<event_id>/restart-index")
+@admin_required
+def restart_index_event(event_id: str):
+    try:
+        queued = _indexing().restart_index(event_id)
+    except (KeyError, ValueError):
+        abort(404)
+    _coordinator().signal()
+    _admin_store().record_audit("index_restart_requested", event_id, queued=queued)
+    flash(
+        "Full reindex queued. Every photograph will be processed again."
+        if queued
+        else "Indexing is already running for this event.",
+        "success" if queued else "error",
+    )
+    return redirect(url_for("admin.event_detail", event_id=event_id), code=303)
+
+
 @admin.get("/events/<event_id>/index-progress")
 @admin_required
 def index_progress(event_id: str):
@@ -675,6 +693,7 @@ def settings():
         settings=_admin_store().get_settings(),
         model=EMBEDDING_MODEL,
         pipeline_version=INDEX_PIPELINE_VERSION,
+        device_status=current_app.config["COMPUTE_DEVICE_STATUS_PROVIDER"](),
     )
 
 
@@ -688,6 +707,9 @@ def update_settings():
             top_k=int(request.form["top_k"]),
             cluster_similarity=float(request.form["cluster_similarity"]),
             min_cluster_size=int(request.form["min_cluster_size"]),
+            cluster_cohesion_similarity=float(
+                request.form["cluster_cohesion_similarity"]
+            ),
         )
         _admin_store().update_settings(updated)
     except (KeyError, ValueError) as exc:
@@ -696,6 +718,7 @@ def update_settings():
             settings=updated if "updated" in locals() else _admin_store().get_settings(),
             model=EMBEDDING_MODEL,
             pipeline_version=INDEX_PIPELINE_VERSION,
+            device_status=current_app.config["COMPUTE_DEVICE_STATUS_PROVIDER"](),
             error=str(exc),
         ), 400
     _admin_store().record_audit("settings_updated")

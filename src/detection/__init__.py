@@ -9,12 +9,16 @@ import numpy as np
 
 from .face_detector import FaceDetector, Detection
 from .embeddings import EmbeddingExtractor
+from .device import ComputeDeviceStatus, compute_device_status, detect_compute_device
 from src.preprocessing import crop_face_region
 
 __all__ = [
     "FaceDetector",
     "Detection",
     "EmbeddingExtractor",
+    "ComputeDeviceStatus",
+    "compute_device_status",
+    "detect_compute_device",
     "FaceEmbedding",
     "detect_faces",
     "embed_detection",

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import numpy as np
-from sklearn.cluster import DBSCAN
 
+from src.clustering import cluster_index
 from src.indexing.build_index import load_event_index_snapshot
 
 from .admin_store import AdminStore, ClusterRun
@@ -18,7 +18,10 @@ class ClusteringService:
     def request(self, event_id: str) -> ClusterRun:
         settings = self.store.get_settings()
         return self.store.queue_cluster(
-            event_id, settings.cluster_similarity, settings.min_cluster_size
+            event_id,
+            settings.cluster_similarity,
+            settings.min_cluster_size,
+            settings.cluster_cohesion_similarity,
         )
 
     def run_pending(self) -> None:
@@ -35,16 +38,16 @@ class ClusteringService:
     def _run(self, run: ClusterRun) -> None:
         try:
             generation, event_index = self._snapshot_loader(run.event_id)
-            vectors = event_index.index.reconstruct_n(0, len(event_index))
-            vectors = np.asarray(vectors, dtype=np.float32)
-            if not len(vectors):
-                labels = np.empty(0, dtype=np.int64)
-            else:
-                labels = DBSCAN(
-                    eps=1.0 - run.similarity,
-                    min_samples=run.min_cluster_size,
-                    metric="cosine",
-                ).fit_predict(vectors)
+            result = cluster_index(
+                event_index,
+                edge_similarity=run.similarity,
+                cohesion_similarity=run.cohesion_similarity,
+                min_cluster_size=run.min_cluster_size,
+            )
+            labels = np.full(len(event_index), -1, dtype=np.int64)
+            for cluster_label, cluster in enumerate(result.clusters):
+                for member in cluster.members:
+                    labels[member.face_index] = cluster_label
             assignments = [
                 (
                     index,

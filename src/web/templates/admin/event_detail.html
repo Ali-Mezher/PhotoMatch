@@ -3,66 +3,93 @@
 {% block title %}{{ event.display_name or event.event_id }}{% endblock %}
 {% block content %}
 <header class="page-header split-header">
-  <div><a class="back-link" href="{{ url_for('admin.overview') }}">← All events</a><h1>{{ event.display_name or event.event_id }}</h1><p>{{ event.event_date }} · <code>{{ event.event_id }}</code></p></div>
-  <div class="event-code"><span>Attendee code</span><strong>{{ access_code }}</strong></div>
+  <div><a class="back-link" href="{{ url_for('admin.overview') }}">← All events</a><p class="eyebrow">Step 2 of 5</p><h1>{{ event.display_name or event.event_id }}</h1><p>{{ event.event_date }}</p></div>
+  <span class="status status-{{ event.status.value }}">{{ event.status|friendly_status }}</span>
 </header>
 <section class="summary-strip event-summary" data-live-summary>
-  <div><strong>{{ event.total_images }}</strong><span>Photos</span></div><div><strong>{{ event.indexed_images }}</strong><span>Indexed</span></div><div><strong>{{ event.no_face_images }}</strong><span>No face</span></div><div><strong>{{ event.failed_images }}</strong><span>Failed</span></div>
+  <div><strong>{{ event.total_images }}</strong><span>Total photographs</span></div><div><strong>{{ event.indexed_images }}</strong><span>Ready to search</span></div><div><strong>{{ event.pending_images }}</strong><span>Remaining</span></div><div><strong>{{ event.failed_images }}</strong><span>Need attention</span></div>
 </section>
 <div class="two-column">
   <section class="form-panel upload-panel">
-    <div class="section-heading"><div><h2>Add photos</h2><p>JPG or PNG · 50 MB per photo · Select any number; uploads are sent in safe batches.</p></div></div>
+    <div class="section-heading"><div><p class="eyebrow">Step 2</p><h2>Add event photographs</h2><p>Choose JPG or PNG files. Large selections are uploaded safely in smaller batches.</p></div></div>
     <form action="{{ url_for('admin.upload_photos', event_id=event.event_id) }}" method="post" enctype="multipart/form-data" data-batch-upload>
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <label class="drop-zone" for="event-photos"><strong>Choose photos or drop them here</strong><span data-upload-copy>Multiple files are supported.</span><input id="event-photos" type="file" name="photos" accept="image/jpeg,image/png" multiple required></label>
       <div class="upload-progress" hidden data-upload-progress><div><span data-upload-bar></span></div><p aria-live="polite" data-upload-status></p></div>
-      <button class="button button-primary" type="submit">Import and index</button>
+      <button class="button button-primary" type="submit">Add photographs</button>
     </form>
   </section>
   <section class="form-panel operations-panel">
-    <div class="section-heading"><div><h2>Processing</h2><p>Indexing and clustering run one at a time.</p></div><span class="status status-{{ event.status.value }}">{{ event.status.value|replace('_', ' ') }}</span></div>
+    <div class="section-heading"><div><p class="eyebrow">Step 3</p><h2>Prepare photographs</h2><p>PhotoMatch checks faces automatically. You can continue when the status is Ready.</p></div><span class="status status-{{ event.status.value }}">{{ event.status|friendly_status }}</span></div>
     {% if event.error %}<div class="notice notice-error">{{ event.error }}</div>{% endif %}
     {% set is_active = event.status.value in ['queued', 'indexing'] %}
     {% set is_held = event.status.value in ['paused', 'stopped'] %}
     <div class="index-progress" data-index-progress data-active="{{ 'true' if is_active else 'false' }}" data-url="{{ url_for('admin.index_progress', event_id=event.event_id) }}" {% if not is_active and not is_held %}hidden{% endif %}>
-      <div><span data-progress-label>{{ 'Waiting' if event.status.value == 'queued' else ('Paused' if event.status.value == 'paused' else ('Stopped' if event.status.value == 'stopped' else 'Indexing')) }}</span><strong data-progress-percent>{{ index_progress.percent }}%</strong></div>
+      <div><span data-progress-label>{{ event.status|friendly_status }}</span><strong data-progress-percent>{{ index_progress.percent }}%</strong></div>
       <progress data-progress-bar value="{{ index_progress.percent }}" max="100" aria-label="Indexing progress">{{ index_progress.percent }}%</progress>
     </div>
     {% if is_held %}<div class="notice notice-warning">Indexing is {{ event.status.value }}. {{ event.indexed_images }} photo{{ 's' if event.indexed_images != 1 }} already indexed {{ 'is' if event.indexed_images == 1 else 'are' }} kept. Resume to process the {{ event.pending_images }} remaining.</div>{% endif %}
-    <dl class="detail-list"><div><dt>Pending images</dt><dd data-live-pending>{{ event.pending_images }}</dd></div><div><dt>Cluster result</dt><dd>{% if cluster %}<a href="{{ url_for('admin.cluster_review', event_id=event.event_id, run_id=cluster.run_id) }}">{{ 'Stale — run again' if cluster_stale else cluster.status|capitalize }}</a>{% else %}Not run{% endif %}</dd></div></dl>
+    <dl class="detail-list"><div><dt>Completed</dt><dd>{{ index_progress.completed }} of {{ index_progress.total }}</dd></div><div><dt>Remaining</dt><dd data-live-pending>{{ event.pending_images }}</dd></div></dl>
     <div class="operation-actions">
-      <form action="{{ url_for('admin.index_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Check and index</button></form>
+      <form action="{{ url_for('admin.restart_index_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button{% if event.status.value == 'failed' %} button-primary{% endif %}" type="submit" {% if is_active or not event.total_images %}disabled title="{{ 'Indexing is already running' if is_active else 'Add photographs first' }}"{% endif %}>Try indexing again</button></form>
       {% if is_active %}
       <form action="{{ url_for('admin.pause_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Pause</button></form>
-      <form action="{{ url_for('admin.stop_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-danger" type="submit">Stop</button></form>
+      <form action="{{ url_for('admin.stop_event', event_id=event.event_id) }}" method="post" data-confirm="Stop processing this event? Completed work will be kept."><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-danger" type="submit">Stop</button></form>
       {% elif is_held %}
       <form action="{{ url_for('admin.resume_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-primary" type="submit">Resume</button></form>
       {% endif %}
-      {% if event.failed_images %}<form action="{{ url_for('admin.retry_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Retry failed</button></form>{% endif %}
-      <form action="{{ url_for('admin.cluster_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-primary" type="submit" {% if event.status.value != 'indexed' or event.pending_images or event.failed_images %}disabled title="Finish indexing first"{% endif %}>Cluster identities</button></form>
+      {% if event.failed_images %}<form action="{{ url_for('admin.retry_event', event_id=event.event_id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit">Try failed photos again</button></form>{% endif %}
     </div>
+    <p class="muted">Try again reprocesses every photograph. Threshold-only changes do not require reindexing.</p>
   </section>
 </div>
-<section class="section-block" id="hosts">
-  <div class="section-heading"><div><h2>Hosts</h2><p>People running this event. Email them the attendee code to share with attendees.</p></div>{% if organizer_mailto %}<a class="button button-primary" href="{{ organizer_mailto }}">Email attendee code</a>{% endif %}</div>
+<section class="section-block form-panel identity-groups-panel" id="identity-groups">
+  <div class="section-heading">
+    <div><p class="eyebrow">Identity groups</p><h2>Clustered face groups</h2><p>Review photographs that PhotoMatch has grouped as possibly showing the same person.</p></div>
+  </div>
+  <dl class="detail-list">
+    <div>
+      <dt>Latest result</dt>
+      <dd>
+        {% if cluster_stale %}Out of date — run again
+        {% elif cluster and cluster.status == 'complete' %}Ready to review
+        {% elif cluster %}{{ cluster.status|capitalize }}
+        {% else %}No groups created yet{% endif %}
+      </dd>
+    </div>
+  </dl>
+  <div class="operation-actions">
+    {% if cluster %}<a class="button button-primary" href="{{ url_for('admin.cluster_review', event_id=event.event_id, run_id=cluster.run_id) }}">View clustered groups</a>{% endif %}
+    <form action="{{ url_for('admin.cluster_event', event_id=event.event_id) }}" method="post">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <button class="button" type="submit" {% if event.status.value != 'indexed' or event.pending_images or event.failed_images %}disabled title="Finish processing first"{% endif %}>{{ 'Create groups again' if cluster else 'Create clustered groups' }}</button>
+    </form>
+  </div>
+</section>
+<details class="section-block advanced-panel" id="hosts">
+  <summary>Event contacts and internal details</summary>
+  <div class="advanced-content">
+  <div class="section-heading"><div><h2>Event contacts</h2><p>Optional contact information for staff coordinating this event.</p></div></div>
+  <dl class="detail-list"><div><dt>Internal event ID</dt><dd><code>{{ event.event_id }}</code></dd></div></dl>
   {% if organizer_error %}<div class="notice notice-error" role="alert">{{ organizer_error }}</div>{% endif %}
   <div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th></th></tr></thead><tbody>
-    {% for organizer in organizers %}<tr><td data-label="Name"><strong>{{ organizer.name }}</strong></td><td data-label="Email"><a href="mailto:{{ organizer.email }}">{{ organizer.email }}</a></td><td data-label=""><form action="{{ url_for('admin.remove_organizer', event_id=event.event_id, organizer_id=organizer.id) }}" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-danger" type="submit">Remove</button></form></td></tr>{% else %}<tr><td colspan="3" class="empty-cell">No hosts added yet.</td></tr>{% endfor %}
+    {% for organizer in organizers %}<tr><td data-label="Name"><strong>{{ organizer.name }}</strong></td><td data-label="Email"><a href="mailto:{{ organizer.email }}">{{ organizer.email }}</a></td><td data-label=""><form action="{{ url_for('admin.remove_organizer', event_id=event.event_id, organizer_id=organizer.id) }}" method="post" data-confirm="Remove this event contact?"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="button button-danger" type="submit">Remove</button></form></td></tr>{% else %}<tr><td colspan="3" class="empty-cell">No contacts added yet.</td></tr>{% endfor %}
   </tbody></table></div>
   <form class="organizer-form" action="{{ url_for('admin.add_organizer', event_id=event.event_id) }}" method="post">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <label>Name<input name="name" maxlength="120" autocomplete="off" placeholder="e.g. Deemah" required></label>
     <label>Email<input name="email" type="email" maxlength="254" autocomplete="off" placeholder="name@example.com" required></label>
-    <button class="button" type="submit">Add host</button>
+    <button class="button" type="submit">Add contact</button>
   </form>
-</section>
+  </div>
+</details>
 <div class="workflow-divider" aria-hidden="true"></div>
 <section class="section-block person-search" id="person-search">
   <header class="person-search-heading">
-    <div><p class="eyebrow">Person lookup</p><h2>Search for a person</h2><p>Use a clear selfie to search only this event’s indexed photos.</p></div>
+    <div><p class="eyebrow">Step 4</p><h2>Photograph the customer</h2><p>Take a clear, front-facing photo or choose one from this device.</p></div>
     <dl class="search-scope">
       <div><dt>Search scope</dt><dd>{{ event.indexed_images }} searchable photo{% if event.indexed_images != 1 %}s{% endif %}</dd></div>
-      <div><dt>Access</dt><dd>No attendee code required</dd></div>
+      <div><dt>Status</dt><dd>{{ 'Ready to search' if search_ready else 'Finish processing first' }}</dd></div>
     </dl>
   </header>
   {% if search_error %}<div class="notice notice-error" role="alert">{{ search_error }}</div>{% endif %}
@@ -70,20 +97,23 @@
   <form class="admin-selfie-form" action="{{ url_for('admin.search_person', event_id=event.event_id) }}" method="post" enctype="multipart/form-data" data-search-form>
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     {{ selfie_picker(disabled=not search_ready) }}
-    {{ search_submit('Search This Event', disabled=not search_ready) }}
+    {{ search_submit('Find Matching Photos', disabled=not search_ready) }}
   </form>
   {% if search %}{% include "admin/search_results.html" %}{% endif %}
 </section>
-<section class="section-block">
-  <div class="section-heading"><div><h2>Photo inventory</h2><p>Each source image is tracked independently, so new additions do not reindex completed photos.</p></div></div>
+<details class="section-block advanced-panel">
+  <summary>Advanced photograph details</summary>
+  <div class="advanced-content">
+  <div class="section-heading inventory-heading"><div><h2>Photograph details</h2><p>Technical status for every source file.</p></div></div>
   <div class="table-wrap"><table><thead><tr><th>Filename</th><th>Status</th><th>Faces</th><th>Updated</th><th>Issue</th></tr></thead><tbody data-live-inventory>
-    {% for image in images %}<tr><td data-label="Filename"><strong>{{ image.photo_path|basename }}</strong></td><td data-label="Status"><span class="status status-{{ image.status.value }}">{{ image.status.value|replace('_', ' ') }}</span></td><td data-label="Faces">{{ image.face_count }}</td><td data-label="Updated">{{ image.updated_at or '—' }}</td><td data-label="Issue">{{ image.error or '—' }}</td></tr>{% else %}<tr><td colspan="5" class="empty-cell">No photos imported yet.</td></tr>{% endfor %}
+    {% for image in images %}<tr><td data-label="Filename"><strong>{{ image.photo_path|basename }}</strong></td><td data-label="Status"><span class="status status-{{ image.status.value }}">{{ image.status|friendly_status }}</span></td><td data-label="Faces">{{ image.face_count }}</td><td data-label="Updated">{{ image.updated_at or '—' }}</td><td data-label="Issue">{{ image.error or '—' }}</td></tr>{% else %}<tr><td colspan="5" class="empty-cell">No photographs added yet.</td></tr>{% endfor %}
   </tbody></table></div>
-</section>
+  </div>
+</details>
 <section class="section-block danger-zone">
-  <div class="section-heading"><div><p class="eyebrow">Danger zone</p><h2>Delete event</h2><p>Permanently removes this event, its original photos, face index, attendee code, and clustering results.</p></div></div>
+  <div class="section-heading"><div><p class="eyebrow">Danger zone</p><h2>Delete event</h2><p>Permanently removes this event, its original photographs, recognition data, and identity groups.</p></div></div>
   {% if delete_error %}<div class="notice notice-error" role="alert">{{ delete_error }}</div>{% endif %}
-  <form action="{{ url_for('admin.delete_event', event_id=event.event_id) }}" method="post" class="delete-event-form">
+  <form action="{{ url_for('admin.delete_event', event_id=event.event_id) }}" method="post" class="delete-event-form" data-confirm="Permanently delete this event and all of its photographs? This cannot be undone.">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <label>Enter <code>{{ event.event_id }}</code> to confirm<input name="confirmation" autocomplete="off" required></label>
     <button class="button button-danger" type="submit">Delete event permanently</button>

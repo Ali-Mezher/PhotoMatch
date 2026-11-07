@@ -7,11 +7,13 @@ the same kind of thin wrapper as face_detector.py, for the same reason:
 swapping the embedding model later should mean changing this file only.
 """
 
+import os
 import sys
 
 import numpy as np
 
-from config import EMBEDDING_MODEL, EMBEDDING_DIM
+from config import EMBEDDING_MODEL, EMBEDDING_DIM, MODELS_DIR
+from .device import configure_compute_device, run_tensorflow_operation
 
 
 class EmbeddingExtractor:
@@ -26,6 +28,12 @@ class EmbeddingExtractor:
 
     def _ensure_loaded(self):
         if self._deepface is None:
+            # DeepFace stores weights under ``DEEPFACE_HOME/.deepface``.
+            # Point it at PhotoMatch's persistent, gitignored model directory
+            # before importing the library. This makes Docker's model volume
+            # useful and prevents a container replacement from losing weights.
+            os.environ.setdefault("DEEPFACE_HOME", str(MODELS_DIR.resolve()))
+
             # DeepFace logs emoji while downloading model weights. Windows
             # PowerShell may expose a cp1252 stream, which otherwise raises a
             # UnicodeEncodeError before the download even starts.
@@ -34,6 +42,7 @@ class EmbeddingExtractor:
                 if reconfigure is not None:
                     reconfigure(errors="replace")
 
+            configure_compute_device()
             try:
                 from deepface import DeepFace  # deferred import — heavy, TF-backed
             except (ImportError, ValueError) as exc:
@@ -44,6 +53,13 @@ class EmbeddingExtractor:
                 ) from exc
 
             self._deepface = DeepFace
+
+    def prepare_model(self) -> None:
+        """Download or load the configured model before offline operation."""
+        self._ensure_loaded()
+        run_tensorflow_operation(
+            lambda: self._deepface.build_model(self.model_name)
+        )
 
     def get_embedding(self, face_image: np.ndarray) -> np.ndarray:
         """
@@ -70,11 +86,13 @@ class EmbeddingExtractor:
 
         # detector_backend="skip" because we already ran our own MTCNN
         # detector upstream — no need for deepface to re-detect.
-        result = self._deepface.represent(
-            img_path=face_image,
-            model_name=self.model_name,
-            detector_backend="skip",
-            enforce_detection=False,
+        result = run_tensorflow_operation(
+            lambda: self._deepface.represent(
+                img_path=face_image,
+                model_name=self.model_name,
+                detector_backend="skip",
+                enforce_detection=False,
+            )
         )
 
         embedding = np.array(result[0]["embedding"], dtype=np.float32)

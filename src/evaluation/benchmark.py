@@ -34,6 +34,18 @@ class IdentityResult:
     metrics: RetrievalMetrics
     query_time_seconds: float
     top_score: float | None  # None if the index returned zero results
+    selfie_filename: str = ""
+
+
+@dataclass(frozen=True)
+class ScoreObservation:
+    """One query-to-photo score with its human-provided ground-truth label."""
+
+    identity: str
+    selfie_filename: str
+    candidate_filename: str
+    score: float
+    genuine: bool
 
 
 @dataclass
@@ -48,6 +60,15 @@ class BenchmarkResult:
     # genuine/impostor dataset for issue #14's threshold tuning.
     genuine_scores: list[float] = field(default_factory=list)
     impostor_scores: list[float] = field(default_factory=list)
+    score_observations: list[ScoreObservation] = field(default_factory=list)
+
+    @property
+    def identity_count(self) -> int:
+        return len({result.name for result in self.identity_results})
+
+    @property
+    def query_count(self) -> int:
+        return len(self.identity_results)
 
     @property
     def mean_precision(self) -> float:
@@ -83,29 +104,34 @@ def _warm_up_models() -> None:
         pass  # a blank image finding no faces is fine — we only care about warm-up
 
 
-def _search_one_identity(
-    identity: Identity, index, k: int
-) -> tuple[IdentityResult, list[float], list[float]]:
-    selfie = cv2.imread(str(identity.selfie_path))
+def _search_one_selfie(
+    identity: Identity, selfie_path: Path, index, k: int
+) -> tuple[IdentityResult, list[ScoreObservation]]:
+    selfie = cv2.imread(str(selfie_path))
     if selfie is None:
-        raise ValueError(f"Could not read selfie for '{identity.name}': {identity.selfie_path}")
+        raise ValueError(f"Could not read selfie for '{identity.name}': {selfie_path}")
 
     start = time.perf_counter()
 
     cleaned = preprocess_image(selfie)
     faces = detect_and_embed(cleaned)
     if not faces:
-        raise ValueError(f"No face detected in selfie for '{identity.name}'.")
+        raise ValueError(
+            f"No face detected in selfie for '{identity.name}': {selfie_path.name}."
+        )
     query_face = max(faces, key=lambda f: f.confidence)
 
-    search_k = max(k, DEFAULT_SEARCH_K)
+    try:
+        index_size = len(index)
+    except TypeError:
+        index_size = 0
+    search_k = max(k, DEFAULT_SEARCH_K, index_size)
     scores, metadata = index.search(query_face.embedding, k=search_k)
 
     elapsed = time.perf_counter() - start
 
     ranked_filenames = []
-    genuine_scores = []
-    impostor_scores = []
+    observations = []
     seen = set()
 
     for score, meta in zip(scores, metadata):
@@ -115,10 +141,15 @@ def _search_one_identity(
         seen.add(filename)
         ranked_filenames.append(filename)
 
-        if filename in identity.ground_truth_filenames:
-            genuine_scores.append(score)
-        else:
-            impostor_scores.append(score)
+        observations.append(
+            ScoreObservation(
+                identity=identity.name,
+                selfie_filename=selfie_path.name,
+                candidate_filename=filename,
+                score=float(score),
+                genuine=filename in identity.ground_truth_filenames,
+            )
+        )
 
     metrics = precision_recall_at_k(ranked_filenames, identity.ground_truth_filenames, k)
     top_score = scores[0] if scores else None
@@ -128,8 +159,9 @@ def _search_one_identity(
         metrics=metrics,
         query_time_seconds=elapsed,
         top_score=top_score,
+        selfie_filename=selfie_path.name,
     )
-    return result, genuine_scores, impostor_scores
+    return result, observations
 
 
 def run_benchmark(event_id: str, k: int = DEFAULT_EVAL_TOP_K) -> BenchmarkResult:
@@ -169,12 +201,21 @@ def run_benchmark(event_id: str, k: int = DEFAULT_EVAL_TOP_K) -> BenchmarkResult
     identity_results = []
     all_genuine = []
     all_impostor = []
+    all_observations = []
 
     for identity in eval_set.identities:
-        result, genuine, impostor = _search_one_identity(identity, index, k)
-        identity_results.append(result)
-        all_genuine.extend(genuine)
-        all_impostor.extend(impostor)
+        for selfie_path in identity.selfie_paths:
+            result, observations = _search_one_selfie(
+                identity, selfie_path, index, k
+            )
+            identity_results.append(result)
+            all_observations.extend(observations)
+            all_genuine.extend(
+                observation.score for observation in observations if observation.genuine
+            )
+            all_impostor.extend(
+                observation.score for observation in observations if not observation.genuine
+            )
 
     return BenchmarkResult(
         event_id=event_id,
@@ -182,4 +223,5 @@ def run_benchmark(event_id: str, k: int = DEFAULT_EVAL_TOP_K) -> BenchmarkResult
         identity_results=identity_results,
         genuine_scores=all_genuine,
         impostor_scores=all_impostor,
+        score_observations=all_observations,
     )

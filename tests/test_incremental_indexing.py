@@ -208,6 +208,20 @@ def test_changed_or_removed_photo_rebuilds_current_inventory(tmp_path):
     ]
 
 
+def test_restart_index_reprocesses_every_current_photo(tmp_path):
+    service, updater, events_dir = _service(tmp_path)
+    first = _add_photo(events_dir, "graduation", "first.jpg")
+    second = _add_photo(events_dir, "graduation", "second.jpg")
+    service.register_event("graduation", "2026-07-01")
+    service.request_index("graduation")
+    service._drain_queue()
+
+    assert service.restart_index("graduation") is True
+    service._drain_queue()
+
+    assert updater.calls[-1] == ("graduation", [first, second], True)
+
+
 def test_failed_image_can_be_explicitly_retried(tmp_path):
     service, updater, events_dir = _service(tmp_path)
     photo = _add_photo(events_dir, "graduation", "broken.jpg")

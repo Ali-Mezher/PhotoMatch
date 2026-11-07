@@ -2,7 +2,7 @@
 {% block title %}Overview{% endblock %}
 {% block content %}
 <header class="page-header split-header">
-  <div><p class="eyebrow">Local operations</p><h1>Events</h1><p>Review photo readiness, event codes, and cluster runs.</p></div>
+  <div><p class="eyebrow">PhotoMatch shop workspace</p><h1>Choose an event</h1><p>Select an event to add photographs or find a customer’s pictures.</p></div>
   <a class="button button-primary" href="{{ url_for('admin.new_event') }}">Create event</a>
 </header>
 <section class="summary-strip" aria-label="Event summary">
@@ -11,12 +11,19 @@
   <div><strong>{{ totals.ready }}</strong><span>Ready</span></div>
   <div><strong>{{ totals.attention }}</strong><span>Need attention</span></div>
 </section>
+<ol class="workflow-steps" aria-label="Shop workflow">
+  <li><span>1</span><strong>Create or select an event</strong></li>
+  <li><span>2</span><strong>Add event photographs</strong></li>
+  <li><span>3</span><strong>Wait until ready</strong></li>
+  <li><span>4</span><strong>Photograph the customer</strong></li>
+  <li><span>5</span><strong>Download their matches</strong></li>
+</ol>
 <section class="section-block">
-  <div class="section-heading"><div><h2>Event inventory</h2><p>Oldest events appear first.</p></div></div>
+  <div class="section-heading"><div><h2>Event list</h2><p>Open a ready event to search, or another event to finish setup.</p></div></div>
   <form class="inventory-toolbar" method="get" action="{{ url_for('admin.overview') }}" role="search">
     <label class="inventory-search">
       <span class="sr-only">Search events</span>
-      <input type="search" name="q" value="{{ query }}" placeholder="Search name, code, or date…" maxlength="100" autocomplete="off">
+      <input type="search" name="q" value="{{ query }}" placeholder="Search by event name or date…" maxlength="100" autocomplete="off">
     </label>
     <label class="page-size-control">
       <span>Rows per page</span>
@@ -30,18 +37,16 @@
   {% if events %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Event</th><th>Date</th><th>Index</th><th>Photos</th><th>Cluster</th><th>Access code</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <thead><tr><th>Event</th><th>Date</th><th>Status</th><th>Photographs</th><th><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>
         {% for event in events %}
         {% set cluster = clusters[event.event_id] %}
         <tr>
           <td data-label="Event"><a class="table-title" href="{{ url_for('admin.event_detail', event_id=event.event_id) }}">{{ event.display_name or event.event_id }}</a><small>{{ event.event_id }}</small></td>
           <td data-label="Date">{{ event.event_date }}</td>
-          <td data-label="Index"><span class="status status-{{ event.status.value }}">{{ event.status.value|replace('_', ' ') }}</span>{% if event.pending_images %}<small>{{ event.pending_images }} pending</small>{% endif %}</td>
-          <td data-label="Photos">{{ event.indexed_images }} / {{ event.total_images }}<small>{{ event.no_face_images }} no face · {{ event.failed_images }} failed</small></td>
-          <td data-label="Cluster">{% if cluster %}<a href="{{ url_for('admin.cluster_review', event_id=event.event_id, run_id=cluster.run_id) }}">{{ 'Stale' if stale_clusters[event.event_id] else cluster.status|capitalize }}</a><small>{% if cluster.status == 'complete' %}{{ cluster.cluster_count }} groups{% endif %}</small>{% else %}<span class="muted">Not run</span>{% endif %}</td>
-          <td data-label="Access code"><code>{{ access_codes[event.event_id] }}</code></td>
-          <td><a class="row-action" href="{{ url_for('admin.event_detail', event_id=event.event_id) }}">Manage →</a></td>
+          <td data-label="Status"><span class="status status-{{ event.status.value }}">{{ event.status|friendly_status }}</span>{% if event.pending_images %}<small>{{ event.pending_images }} remaining</small>{% endif %}</td>
+          <td data-label="Photographs">{{ event.indexed_images }} of {{ event.total_images }} ready{% if event.failed_images %}<small>{{ event.failed_images }} need attention</small>{% endif %}</td>
+          <td><a class="row-action" href="{{ url_for('admin.event_detail', event_id=event.event_id) }}">Open event →</a></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -55,10 +60,11 @@
     </div>
   </nav>
   {% elif totals.events %}
-  <div class="empty-state"><h3>No matching events</h3><p>Check the event name, access code, or date and try again.</p><a class="button" href="{{ url_for('admin.overview') }}">Clear search</a></div>
+  <div class="empty-state"><h3>No matching events</h3><p>Check the event name or date and try again.</p><a class="button" href="{{ url_for('admin.overview') }}">Clear search</a></div>
   {% else %}<div class="empty-state"><h3>No events yet</h3><p>Create an event, then import its event photos.</p><a class="button" href="{{ url_for('admin.new_event') }}">Create first event</a></div>{% endif %}
 </section>
-<section class="section-block audit-block">
+<details class="section-block advanced-panel audit-block">
+  <summary>Recent system activity</summary>
   <div class="section-heading">
     <div><h2>Recent activity</h2><p>The latest security and operational actions on this device.</p></div>
     {% if audit_total %}<a class="row-action" href="{{ url_for('admin.activity') }}">View All →</a>{% endif %}
@@ -72,5 +78,5 @@
     </li>
     {% else %}<li class="muted">No activity recorded yet.</li>{% endfor %}
   </ul>
-</section>
+</details>
 {% endblock %}

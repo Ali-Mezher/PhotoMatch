@@ -6,6 +6,7 @@ its own values — this is what keeps preprocessing, detection, indexing,
 and matching compatible with each other across the team.
 """
 
+import os
 import re
 from pathlib import Path
 
@@ -15,7 +16,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_ROOT / "data"
 EVENTS_DIR = DATA_DIR / "events"          # data/events/<event_id>/*.jpg
-MODELS_DIR = PROJECT_ROOT / "models"      # pretrained weights live here (gitignored)
+MODELS_DIR = Path(
+    os.environ.get("PHOTOMATCH_MODELS_DIR", str(PROJECT_ROOT / "models"))
+)  # pretrained weights live here (gitignored)
 
 # ---------------------------------------------------------------------------
 # Preprocessing

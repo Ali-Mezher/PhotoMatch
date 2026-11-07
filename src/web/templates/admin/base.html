@@ -19,14 +19,13 @@
     </header>
     <aside class="admin-rail" id="admin-nav">
       <a class="admin-brand" href="{{ url_for('admin.overview') }}"><span class="brand-mark"></span>PhotoMatch</a>
-      <p class="rail-label">Operator console</p>
+      <p class="rail-label">Shop workspace</p>
       <nav aria-label="Admin navigation">
-        <a href="{{ url_for('admin.overview') }}" {% if request.endpoint == 'admin.overview' %}aria-current="page"{% endif %}>Overview</a>
-        <a href="{{ url_for('admin.new_event') }}" {% if request.endpoint == 'admin.new_event' %}aria-current="page"{% endif %}>New event</a>
-        <a href="{{ url_for('admin.settings') }}" {% if request.endpoint in ['admin.settings', 'admin.update_settings'] %}aria-current="page"{% endif %}>Settings</a>
+        <a href="{{ url_for('admin.overview') }}" {% if request.endpoint == 'admin.overview' %}aria-current="page"{% endif %}>Events</a>
+        <a href="{{ url_for('admin.new_event') }}" {% if request.endpoint == 'admin.new_event' %}aria-current="page"{% endif %}>Create event</a>
+        <a href="{{ url_for('admin.settings') }}" {% if request.endpoint in ['admin.settings', 'admin.update_settings'] %}aria-current="page"{% endif %}>Advanced settings</a>
       </nav>
       <div class="rail-bottom">
-        <a href="{{ url_for('home') }}">Attendee search ↗</a>
         <form action="{{ url_for('admin.logout') }}" method="post">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
           <button class="text-button" type="submit">Sign out</button>
